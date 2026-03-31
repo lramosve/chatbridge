@@ -48,6 +48,7 @@ import * as remote from '@/packages/remote'
 import PictureDialog from '@/pages/PictureDialog'
 import RemoteDialogWindow from '@/pages/RemoteDialogWindow'
 import SearchDialog from '@/pages/SearchDialog'
+import { AuthGuard } from '@/components/auth/AuthGuard'
 import platform from '@/platform'
 import { router } from '@/router'
 import Sidebar from '@/Sidebar'
@@ -490,11 +491,13 @@ export const Route = createRootRoute({
       >
         <ThemeProvider theme={theme}>
           <CssBaseline />
-          <NiceModal.Provider>
-            <ErrorBoundary>
-              <Root />
-            </ErrorBoundary>
-          </NiceModal.Provider>
+          <AuthGuard>
+            <NiceModal.Provider>
+              <ErrorBoundary>
+                <Root />
+              </ErrorBoundary>
+            </NiceModal.Provider>
+          </AuthGuard>
         </ThemeProvider>
       </MantineProvider>
     )
