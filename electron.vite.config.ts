@@ -42,8 +42,9 @@ export function servePlugins(): Plugin {
     name: 'serve-plugins',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        if (req.url?.startsWith('/plugins/')) {
-          const filePath = resolve(pluginsDir, req.url.replace('/plugins/', ''))
+        const urlPath = req.url?.split('?')[0] // strip query params
+        if (urlPath?.startsWith('/plugins/')) {
+          const filePath = resolve(pluginsDir, urlPath.replace('/plugins/', ''))
           if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
             const ext = path.extname(filePath)
             const mimeTypes: Record<string, string> = {
@@ -262,6 +263,7 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 1212,
         strictPort: true,
+        host: '0.0.0.0',
       },
       define: {
         'process.type': '"renderer"',

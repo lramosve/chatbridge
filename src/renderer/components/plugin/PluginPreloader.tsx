@@ -60,7 +60,7 @@ export function PluginPreloader() {
     }
   }, [])
 
-  // Create iframes for active plugins
+  // Create iframes for active plugins (no cleanup — iframes persist across hot reloads)
   useEffect(() => {
     if (!containerEl) return
 
@@ -72,14 +72,13 @@ export function PluginPreloader() {
 
       const iframe = document.createElement('iframe')
       iframe.src = manifest.entryUrl
-      iframe.sandbox.add('allow-scripts', 'allow-forms', 'allow-popups')
+      iframe.sandbox.add('allow-scripts', 'allow-forms', 'allow-popups', 'allow-popups-to-escape-sandbox')
       iframe.style.cssText = 'border:none;background:#fff;'
       iframe.title = manifest.name
       containerEl.appendChild(iframe)
 
       iframe.onload = () => {
         controller.mountIframe(id, iframe)
-        // Restore last known state after iframe is ready
         controller.waitForReady(id, 5000).then(() => {
           const lastState = getLastState(id)
           if (lastState) {
@@ -90,6 +89,7 @@ export function PluginPreloader() {
 
       iframeMap.set(id, iframe)
     }
+    // No cleanup — iframes are global singletons managed by iframeMap
   }, [activeIds, plugins, controller])
 
   // Position the active iframe over the side panel target area

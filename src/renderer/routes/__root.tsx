@@ -58,10 +58,17 @@ import * as atoms from '@/stores/atoms'
 import * as premiumActions from '@/stores/premiumActions'
 import * as settingActions from '@/stores/settingActions'
 import { settingsStore, useLanguage, useSettingsStore, useTheme } from '@/stores/settingsStore'
+import { usePluginPanel } from '@/stores/pluginPanelStore'
 import { useUIStore } from '@/stores/uiStore'
 
 function Root() {
   const location = useLocation()
+  const closePanel = usePluginPanel((s) => s.close)
+
+  // Close plugin side panel when navigating to a new chat
+  useEffect(() => {
+    closePanel()
+  }, [location.pathname, closePanel])
   const spellCheck = useSettingsStore((state) => state.spellCheck)
   const language = useLanguage()
   const initialized = useRef(false)

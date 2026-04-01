@@ -105,8 +105,10 @@
 
   <script>
     // ── Spotify OAuth Config (PKCE) ──
-    const REDIRECT_URI = window.location.origin + '/plugins/spotify/callback.html';
-    const SCOPES = 'playlist-modify-public playlist-modify-private';
+    // Spotify requires 127.0.0.1 or [::1] for loopback, not "localhost"
+    const origin = window.location.origin.replace('//localhost:', '//127.0.0.1:');
+    const REDIRECT_URI = origin + '/plugins/spotify/callback.html';
+    const SCOPES = 'playlist-modify-public playlist-modify-private user-read-private user-read-email';
 
     let seq = 0;
     let spotifyClientId = '';
@@ -331,8 +333,11 @@
 
     // ── Spotify API ──
     async function searchTracks(query) {
-      // Use Spotify search API if authenticated, otherwise use demo data
-      if (accessToken && accessToken !== 'demo-token') {
+      if (!accessToken) {
+        throw new Error('AUTH_REQUIRED: Please connect your Spotify account first. Enter a Spotify Client ID and click "Connect Spotify" in the side panel, or leave it empty to use Demo mode.');
+      }
+
+      if (accessToken !== 'demo-token') {
         const res = await bridgeFetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=10`, {
           headers: { Authorization: `Bearer ${accessToken}` }
         });
