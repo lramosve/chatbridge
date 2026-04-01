@@ -33,6 +33,7 @@ import {
   knowledgeBaseSearchByPromptEngineering,
   searchByPromptEngineering,
 } from './tools'
+import { getPluginToolSet, getPluginToolSetDescription } from '../plugin-controller/pluginTools'
 import fileToolSet from './toolsets/file'
 import { getToolSet } from './toolsets/knowledge-base'
 import websearchToolSet, { parseLinkTool, webSearchTool } from './toolsets/web-search'
@@ -175,6 +176,12 @@ export async function streamText(
     toolSetInstructions += websearchToolSet.description
   }
 
+  // Add plugin tool descriptions
+  const pluginToolSetDescription = getPluginToolSetDescription()
+  if (pluginToolSetDescription) {
+    toolSetInstructions += pluginToolSetDescription
+  }
+
   params.messages = injectModelSystemPrompt(
     model.modelId,
     params.messages,
@@ -313,6 +320,15 @@ export async function streamText(
       tools = {
         ...tools,
         ...fileToolSet.tools,
+      }
+    }
+
+    // Merge plugin tools from registered third-party apps
+    const pluginTools = getPluginToolSet()
+    if (Object.keys(pluginTools).length > 0) {
+      tools = {
+        ...tools,
+        ...pluginTools,
       }
     }
 
