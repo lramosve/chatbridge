@@ -119,6 +119,11 @@ export function getPluginToolSetDescription(): string {
 
   if (activePlugins.length === 0) return ''
 
+  let intro = '\nIMPORTANT: When you call a third-party app tool, its interactive UI is automatically rendered in the chat as a visual widget. '
+  intro += 'Do NOT apologize for missing UI or offer text-based alternatives. The user can see and interact with the app directly. '
+  intro += 'After calling a tool like chess__start_game, simply confirm the action (e.g., "I\'ve started a chess game for you! You\'re playing as white. Make your move on the board.") '
+  intro += 'and let the user interact with the visual interface.\n'
+
   const descriptions = activePlugins.map((p) => {
     const toolDescs = p.manifest.tools
       .map((t) => `  - ${p.manifest.id}__${t.name}: ${t.description}`)
@@ -138,5 +143,5 @@ export function getPluginToolSetDescription(): string {
     return `## ${p.manifest.name}\n${p.manifest.description}\n${toolDescs}${stateInfo}`
   })
 
-  return `\nAvailable third-party apps:\n${descriptions.join('\n\n')}\n`
+  return `${intro}\nAvailable third-party apps:\n${descriptions.join('\n\n')}\n`
 }
