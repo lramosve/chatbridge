@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head><title>Spotify Auth Callback</title></head>
+<body>
+  <p>Connecting to Spotify...</p>
+  <script>
+    // Handle the OAuth callback
+    // The authorization code is in the URL params
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const error = params.get('error');
+
+    if (error) {
+      document.body.innerHTML = '<p>Authorization denied. You can close this window.</p>';
+    } else if (code) {
+      // Exchange code for token using PKCE
+      // In a real app, the code verifier would be stored in the opener's sessionStorage
+      // and the token exchange would happen server-side for security.
+      // For this demo, we send the code to the parent iframe.
+      if (window.opener) {
+        window.opener.postMessage({
+          type: 'spotify-auth-code',
+          code: code
+        }, '*');
+      }
+      document.body.innerHTML = '<p>Connected! You can close this window.</p>';
+      setTimeout(() => window.close(), 1500);
+    } else {
+      document.body.innerHTML = '<p>No authorization code received.</p>';
+    }
+  </script>
+</body>
+</html>
