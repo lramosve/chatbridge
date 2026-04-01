@@ -76,21 +76,13 @@ function Root() {
     const tid = setTimeout(() => {
       // biome-ignore lint/nursery/noFloatingPromises: inline call
       ;(async () => {
-        const remoteConfig = await remote
-          .getRemoteConfig('setting_chatboxai_first')
-          .catch(() => ({ setting_chatboxai_first: false }) as RemoteConfig)
+        // ChatBridge fork: skip Chatbox AI remote config fetch (CORS blocked on our domain)
+        const remoteConfig = { setting_chatboxai_first: false } as RemoteConfig
         setRemoteConfig((conf) => ({ ...conf, ...remoteConfig }))
-        // 是否需要弹出设置窗口
         initialized.current = true
+        // Skip the Chatbox AI welcome dialog — users configure their own LLM provider
         if (settingActions.needEditSetting() && location.pathname !== '/settings/mcp') {
-          await NiceModal.show('welcome')
-          return
-        }
-        // 是否需要弹出关于窗口（更新后首次启动）
-        // 目前仅在桌面版本更新后首次启动、且网络环境为"外网"的情况下才自动弹窗
-        const shouldShowAboutDialogWhenStartUp = await platform.shouldShowAboutDialogWhenStartUp()
-        if (shouldShowAboutDialogWhenStartUp && remoteConfig.setting_chatboxai_first) {
-          setOpenAboutDialog(true)
+          navigateToSettings('/')
           return
         }
       })()
