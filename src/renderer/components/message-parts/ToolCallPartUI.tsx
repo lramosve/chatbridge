@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 import { getToolName } from '@/packages/tools'
 import type { SearchResultItem } from '@/packages/web-search'
 import { ScalableIcon } from '../common/ScalableIcon'
-import { PluginMessage } from '../plugin/PluginMessage'
+import { usePluginPanel } from '@/stores/pluginPanelStore'
 
 const ToolCallHeader: FC<{ part: MessageToolCallPart; action: ReactNode; onClick: () => void }> = (props) => {
   return (
@@ -218,15 +218,20 @@ export const ToolCallPartUI: FC<{ part: MessageToolCallPart }> = ({ part }) => {
   // Check if this is a plugin tool call (format: pluginId__toolName)
   if (part.toolName.includes('__')) {
     const pluginId = part.toolName.split('__')[0]
-    return (
-      <>
-        <GeneralToolCallUI part={part} />
-        <PluginMessage pluginId={pluginId} conversationId="active" />
-      </>
-    )
+    return <PluginToolCallUI pluginId={pluginId} part={part} />
   }
 
   return <GeneralToolCallUI part={part} />
+}
+
+/** Plugin tool calls show the standard header + a button to open the side panel */
+const PluginToolCallUI: FC<{ pluginId: string; part: MessageToolCallPart }> = ({ pluginId, part }) => {
+  const open = usePluginPanel((s) => s.open)
+  return (
+    <div onClick={() => open(pluginId)} style={{ cursor: 'pointer' }}>
+      <GeneralToolCallUI part={part} />
+    </div>
+  )
 }
 
 export const ReasoningContentUI: FC<{

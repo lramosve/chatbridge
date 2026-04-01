@@ -49,6 +49,8 @@ import PictureDialog from '@/pages/PictureDialog'
 import RemoteDialogWindow from '@/pages/RemoteDialogWindow'
 import SearchDialog from '@/pages/SearchDialog'
 import { AuthGuard } from '@/components/auth/AuthGuard'
+import { PluginPreloader } from '@/components/plugin/PluginPreloader'
+import { PluginSidePanel } from '@/components/plugin/PluginSidePanel'
 import platform from '@/platform'
 import { router } from '@/router'
 import Sidebar from '@/Sidebar'
@@ -152,9 +154,10 @@ function Root() {
       <Grid container className="h-full">
         <Sidebar />
         <Box
-          className="h-full w-full"
+          className="h-full"
           sx={{
             flexGrow: 1,
+            display: 'flex',
             ...(showSidebar
               ? language === 'ar'
                 ? { paddingRight: { sm: `${sidebarWidth}px` } }
@@ -162,9 +165,13 @@ function Root() {
               : {}),
           }}
         >
-          <ErrorBoundary name="main">
-            <Outlet />
-          </ErrorBoundary>
+          <Box sx={{ flexGrow: 1, minWidth: 0, height: '100%' }}>
+            <ErrorBoundary name="main">
+              <Outlet />
+            </ErrorBoundary>
+          </Box>
+          <PluginSidePanel />
+          <PluginPreloader />
         </Box>
       </Grid>
       {/* 对话设置 */}

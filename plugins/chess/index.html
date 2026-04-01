@@ -28,8 +28,8 @@
     .board {
       display: grid;
       grid-template-columns: repeat(8, 1fr);
-      width: min(360px, 90vw);
-      height: min(360px, 90vw);
+      width: min(400px, 90vw);
+      aspect-ratio: 1;
       border: 2px solid #64748b;
       border-radius: 4px;
       overflow: hidden;
@@ -38,10 +38,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: min(36px, 8vw);
+      font-size: min(36px, 5vw);
       cursor: pointer;
       user-select: none;
       position: relative;
+      aspect-ratio: 1;
     }
     .square.light { background: #f0d9b5; }
     .square.dark { background: #b58863; }

@@ -6,6 +6,7 @@
 import type { PluginManifest, PluginToolDefinition } from '@shared/types/plugin'
 import { tool, type ToolSet } from 'ai'
 import z, { type ZodTypeAny } from 'zod'
+import { usePluginPanel } from '@/stores/pluginPanelStore'
 import { usePluginStore } from '@/stores/pluginStore'
 import { getPluginController } from './PluginController'
 
@@ -75,12 +76,17 @@ function createPluginTool(pluginId: string, toolDef: PluginToolDefinition, manif
         const result = await controller.invokeTool(pluginId, toolDef.name, params, manifest)
         store.recordToolResult('', pluginId, result.status === 'success')
 
+        // Open the side panel AFTER tool completes (moving iframe mid-invocation reloads it)
+        usePluginPanel.getState().open(pluginId)
+
         if (result.status === 'error') {
           return { error: result.errorMessage || 'Tool invocation failed' }
         }
         return result.data
       } catch (err) {
         store.recordToolResult('', pluginId, false)
+        // Still open the panel on error so user can see/interact with the app
+        usePluginPanel.getState().open(pluginId)
         return { error: err instanceof Error ? err.message : String(err) }
       }
     },

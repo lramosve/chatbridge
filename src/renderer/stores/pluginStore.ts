@@ -163,7 +163,7 @@ export const usePluginStore = create<PluginStoreState>()(
       name: 'chatbridge-plugins',
       partialize: (state) => ({
         plugins: state.plugins,
-        // Don't persist sessions — they're ephemeral
+        sessions: state.sessions,
       }),
     }
   )
