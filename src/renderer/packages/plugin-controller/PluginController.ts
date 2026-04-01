@@ -187,14 +187,21 @@ export class PluginController {
       }
 
       case 'FETCH_REQUEST': {
-        this.handleFetchProxy(msg as FetchRequestMessage, event.source as Window)
+        this.handleFetchProxy(msg as FetchRequestMessage)
         break
       }
     }
   }
 
   /** Proxy fetch requests from sandboxed iframes */
-  private async handleFetchProxy(msg: FetchRequestMessage, source: Window) {
+  private async handleFetchProxy(msg: FetchRequestMessage) {
+    // Use the stored iframe reference — event.source is null for sandboxed iframes
+    const iframe = this.iframes.get(msg.pluginId)
+    if (!iframe?.contentWindow) {
+      console.warn(`No iframe for plugin ${msg.pluginId} to send FETCH_RESPONSE`)
+      return
+    }
+
     try {
       const response = await fetch(msg.url, {
         method: msg.options?.method || 'GET',
@@ -220,7 +227,7 @@ export class PluginController {
         ok: response.ok,
         data,
       }
-      source.postMessage(reply, '*')
+      iframe.contentWindow.postMessage(reply, '*')
     } catch (err) {
       const reply: PlatformToAppMessage = {
         protocol: 'chatbridge',
@@ -233,7 +240,7 @@ export class PluginController {
         data: null,
         errorMessage: err instanceof Error ? err.message : String(err),
       }
-      source.postMessage(reply, '*')
+      iframe.contentWindow.postMessage(reply, '*')
     }
   }
 }
