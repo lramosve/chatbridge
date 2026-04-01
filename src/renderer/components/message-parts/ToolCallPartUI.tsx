@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { getToolName } from '@/packages/tools'
 import type { SearchResultItem } from '@/packages/web-search'
 import { ScalableIcon } from '../common/ScalableIcon'
+import { PluginMessage } from '../plugin/PluginMessage'
 
 const ToolCallHeader: FC<{ part: MessageToolCallPart; action: ReactNode; onClick: () => void }> = (props) => {
   return (
@@ -213,7 +214,23 @@ export const ToolCallPartUI: FC<{ part: MessageToolCallPart }> = ({ part }) => {
       return <WebSearchToolCallUI part={parsedPart.data as WebBrowsingToolCallPart} />
     }
   }
+
+  // Check if this is a plugin tool call (format: pluginId__toolName)
+  if (part.toolName.includes('__')) {
+    const pluginId = part.toolName.split('__')[0]
+    return (
+      <>
+        <GeneralToolCallUI part={part} />
+        <PluginToolCallUI pluginId={pluginId} />
+      </>
+    )
+  }
+
   return <GeneralToolCallUI part={part} />
+}
+
+const PluginToolCallUI: FC<{ pluginId: string }> = ({ pluginId }) => {
+  return <PluginMessage pluginId={pluginId} conversationId="active" />
 }
 
 export const ReasoningContentUI: FC<{

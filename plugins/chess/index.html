@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chess - ChatBridge Plugin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      background: #f8fafc;
+      color: #1a1a2e;
+    }
+    .status {
+      font-size: 14px;
+      margin-bottom: 12px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: #e2e8f0;
+      text-align: center;
+    }
+    .status.check { background: #fef2f2; color: #ef4444; }
+    .status.gameover { background: #fef9c3; color: #b45309; }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      width: min(360px, 90vw);
+      height: min(360px, 90vw);
+      border: 2px solid #64748b;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .square {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: min(36px, 8vw);
+      cursor: pointer;
+      user-select: none;
+      position: relative;
+    }
+    .square.light { background: #f0d9b5; }
+    .square.dark { background: #b58863; }
+    .square.selected { background: #ffff00 !important; opacity: 0.8; }
+    .square.legal-move::after {
+      content: '';
+      position: absolute;
+      width: 30%;
+      height: 30%;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.2);
+    }
+    .square.legal-capture { box-shadow: inset 0 0 0 3px rgba(0,0,0,0.3); }
+    .move-history {
+      margin-top: 12px;
+      font-size: 12px;
+      max-width: min(360px, 90vw);
+      max-height: 80px;
+      overflow-y: auto;
+      color: #64748b;
+      text-align: center;
+      word-break: break-all;
+    }
+    .controls {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+    }
+    .controls button {
+      padding: 4px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      background: white;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .controls button:hover { background: #f1f5f9; }
+  </style>
+</head>
+<body>
+  <div class="status" id="status">Click "New Game" or ask the chatbot to start a game.</div>
+  <div class="board" id="board"></div>
+  <div class="move-history" id="moveHistory"></div>
+  <div class="controls">
+    <button onclick="newGame('white')">New Game (White)</button>
+    <button onclick="newGame('black')">New Game (Black)</button>
+    <button onclick="flipBoard()">Flip Board</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script>
+    // ── Piece Unicode Map ──
+    const PIECES = {
+      'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+      'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
+    };
+
+    // ── State ──
+    let game = new Chess();
+    let selectedSquare = null;
+    let playerColor = 'white';
+    let boardFlipped = false;
+    let gameActive = false;
+    let seq = 0;
+
+    // ── ChatBridge Protocol ──
+    function send(payload) {
+      const message = {
+        protocol: 'chatbridge',
+        correlationId: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        seq: seq++,
+        ...payload
+      };
+      window.parent.postMessage(message, '*');
+    }
+
+    function sendStateUpdate() {
+      send({
+        type: 'STATE_UPDATE',
+        pluginId: 'chess',
+        stateSummary: {
+          fen: game.fen(),
+          turn: game.turn() === 'w' ? 'white' : 'black',
+          moveCount: game.history().length,
+          inCheck: game.in_check(),
+          isGameOver: game.game_over(),
+          lastMove: game.history().length > 0 ? game.history().slice(-1)[0] : null,
+          history: game.history().join(' ')
+        },
+        description: getStatusText()
+      });
+    }
+
+    function getStatusText() {
+      if (game.in_checkmate()) {
+        const winner = game.turn() === 'w' ? 'Black' : 'White';
+        return `Checkmate! ${winner} wins in ${Math.ceil(game.history().length / 2)} moves.`;
+      }
+      if (game.in_stalemate()) return 'Stalemate! The game is a draw.';
+      if (game.in_draw()) return 'Draw!';
+      if (game.in_threefold_repetition()) return 'Draw by threefold repetition.';
+      if (game.insufficient_material()) return 'Draw by insufficient material.';
+      const turn = game.turn() === 'w' ? 'White' : 'Black';
+      const check = game.in_check() ? ' (Check!)' : '';
+      return `${turn} to move${check}. Move ${Math.ceil((game.history().length + 1) / 2)}.`;
+    }
+
+    // ── Handle incoming messages ──
+    window.addEventListener('message', async (event) => {
+      const data = event.data;
+      if (!data || data.protocol !== 'chatbridge') return;
+
+      if (data.type === 'TOOL_INVOKE') {
+        let result;
+        try {
+          switch (data.toolName) {
+            case 'start_game':
+              result = handleStartGame(data.parameters);
+              break;
+            case 'make_move':
+              result = handleMakeMove(data.parameters);
+              break;
+            case 'get_board_state':
+              result = handleGetBoardState();
+              break;
+            case 'resign_game':
+              result = handleResign();
+              break;
+            default:
+              throw new Error(`Unknown tool: ${data.toolName}`);
+          }
+          send({
+            type: 'TOOL_RESULT',
+            correlationId: data.correlationId,
+            status: 'success',
+            data: result
+          });
+        } catch (err) {
+          send({
+            type: 'TOOL_RESULT',
+            correlationId: data.correlationId,
+            status: 'error',
+            data: null,
+            errorMessage: err.message
+          });
+        }
+      }
+
+      if (data.type === 'RESTORE_STATE') {
+        if (data.lastStateSummary && data.lastStateSummary.fen) {
+          game = new Chess(data.lastStateSummary.fen);
+          gameActive = true;
+          renderBoard();
+          updateStatus();
+        }
+      }
+    });
+
+    // ── Tool Handlers ──
+    function handleStartGame(params) {
+      playerColor = params.playerColor || 'white';
+      boardFlipped = playerColor === 'black';
+      game = new Chess();
+      gameActive = true;
+      selectedSquare = null;
+      renderBoard();
+      updateStatus();
+      sendStateUpdate();
+      return {
+        fen: game.fen(),
+        playerColor,
+        message: `New game started. You are playing as ${playerColor}.`
+      };
+    }
+
+    function handleMakeMove(params) {
+      if (!gameActive) throw new Error('No active game. Start a new game first.');
+      if (game.game_over()) throw new Error('The game is already over.');
+
+      const move = game.move(params.move, { sloppy: true });
+      if (!move) {
+        const legalMoves = game.moves();
+        throw new Error(`Invalid move: "${params.move}". Legal moves: ${legalMoves.join(', ')}`);
+      }
+
+      selectedSquare = null;
+      renderBoard();
+      updateStatus();
+      sendStateUpdate();
+
+      const result = {
+        fen: game.fen(),
+        move: move.san,
+        from: move.from,
+        to: move.to,
+        captured: move.captured || null,
+        turn: game.turn() === 'w' ? 'white' : 'black',
+        inCheck: game.in_check(),
+        isGameOver: game.game_over(),
+        status: getStatusText()
+      };
+
+      if (game.game_over()) {
+        gameActive = false;
+        send({
+          type: 'APP_COMPLETE',
+          pluginId: 'chess',
+          resultSummary: getStatusText(),
+          data: { fen: game.fen(), history: game.history() }
+        });
+      }
+
+      return result;
+    }
+
+    function handleGetBoardState() {
+      return {
+        fen: game.fen(),
+        turn: game.turn() === 'w' ? 'white' : 'black',
+        moveCount: game.history().length,
+        history: game.history(),
+        legalMoves: game.moves(),
+        inCheck: game.in_check(),
+        isGameOver: game.game_over(),
+        status: getStatusText()
+      };
+    }
+
+    function handleResign() {
+      if (!gameActive) throw new Error('No active game.');
+      gameActive = false;
+      const resignedColor = playerColor;
+      const winner = resignedColor === 'white' ? 'Black' : 'White';
+      const summary = `${resignedColor.charAt(0).toUpperCase() + resignedColor.slice(1)} resigned. ${winner} wins.`;
+      updateStatus();
+      send({
+        type: 'APP_COMPLETE',
+        pluginId: 'chess',
+        resultSummary: summary,
+        data: { fen: game.fen(), history: game.history(), result: 'resignation' }
+      });
+      return { message: summary };
+    }
+
+    // ── Board Rendering ──
+    function renderBoard() {
+      const board = document.getElementById('board');
+      board.innerHTML = '';
+
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const r = boardFlipped ? 7 - row : row;
+          const c = boardFlipped ? 7 - col : col;
+          const file = 'abcdefgh'[c];
+          const rank = 8 - r;
+          const squareName = file + rank;
+          const isLight = (r + c) % 2 === 0;
+
+          const sq = document.createElement('div');
+          sq.className = `square ${isLight ? 'light' : 'dark'}`;
+          sq.dataset.square = squareName;
+
+          const piece = game.get(squareName);
+          if (piece) {
+            const key = piece.color === 'w' ? piece.type.toUpperCase() : piece.type;
+            sq.textContent = PIECES[key] || '';
+          }
+
+          if (selectedSquare === squareName) {
+            sq.classList.add('selected');
+          }
+
+          // Show legal move indicators
+          if (selectedSquare) {
+            const moves = game.moves({ square: selectedSquare, verbose: true });
+            const legalMove = moves.find(m => m.to === squareName);
+            if (legalMove) {
+              sq.classList.add(piece ? 'legal-capture' : 'legal-move');
+            }
+          }
+
+          sq.addEventListener('click', () => onSquareClick(squareName));
+          board.appendChild(sq);
+        }
+      }
+    }
+
+    function onSquareClick(square) {
+      if (!gameActive || game.game_over()) return;
+
+      // Check if it's the player's turn
+      const isPlayerTurn = (game.turn() === 'w' && playerColor === 'white') ||
+                           (game.turn() === 'b' && playerColor === 'black');
+      if (!isPlayerTurn) return;
+
+      if (selectedSquare) {
+        // Try to make a move
+        const move = game.move({ from: selectedSquare, to: square, promotion: 'q' });
+        if (move) {
+          selectedSquare = null;
+          renderBoard();
+          updateStatus();
+          sendStateUpdate();
+
+          if (game.game_over()) {
+            gameActive = false;
+            send({
+              type: 'APP_COMPLETE',
+              pluginId: 'chess',
+              resultSummary: getStatusText(),
+              data: { fen: game.fen(), history: game.history() }
+            });
+          }
+          return;
+        }
+        // If move failed, check if clicking own piece to reselect
+        const piece = game.get(square);
+        if (piece && piece.color === game.turn()) {
+          selectedSquare = square;
+          renderBoard();
+          return;
+        }
+        selectedSquare = null;
+        renderBoard();
+        return;
+      }
+
+      // Select a piece
+      const piece = game.get(square);
+      if (piece && piece.color === game.turn()) {
+        selectedSquare = square;
+        renderBoard();
+      }
+    }
+
+    function updateStatus() {
+      const el = document.getElementById('status');
+      el.textContent = getStatusText();
+      el.className = 'status';
+      if (game.in_check()) el.classList.add('check');
+      if (game.game_over()) el.classList.add('gameover');
+
+      // Update move history
+      const histEl = document.getElementById('moveHistory');
+      const history = game.history();
+      if (history.length > 0) {
+        let text = '';
+        for (let i = 0; i < history.length; i += 2) {
+          text += `${Math.floor(i/2) + 1}. ${history[i]} ${history[i+1] || ''} `;
+        }
+        histEl.textContent = text.trim();
+      } else {
+        histEl.textContent = '';
+      }
+    }
+
+    function newGame(color) {
+      handleStartGame({ playerColor: color });
+    }
+
+    function flipBoard() {
+      boardFlipped = !boardFlipped;
+      renderBoard();
+    }
+
+    // ── Init ──
+    renderBoard();
+    send({ type: 'APP_READY', pluginId: 'chess' });
+  </script>
+</body>
+</html>

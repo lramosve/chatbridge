@@ -3,6 +3,7 @@ import { sentryVitePlugin } from '@sentry/vite-plugin'
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import fs from 'node:fs'
 import path, { resolve } from 'path'
 import { visualizer } from 'rollup-plugin-visualizer'
 import type { Plugin } from 'vite'
@@ -30,6 +31,40 @@ export function injectBaseTag(): Plugin {
  * Vite plugin to replace dvh units with vh units
  * This replaces the webpack string-replace-loader functionality
  */
+/**
+ * Vite plugin to serve /plugins/* from the plugins directory.
+ * In dev, this middleware intercepts requests. For production,
+ * plugins are copied to the build output during the build step.
+ */
+export function servePlugins(): Plugin {
+  const pluginsDir = resolve(__dirname, 'plugins')
+  return {
+    name: 'serve-plugins',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.startsWith('/plugins/')) {
+          const filePath = resolve(pluginsDir, req.url.replace('/plugins/', ''))
+          if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            const ext = path.extname(filePath)
+            const mimeTypes: Record<string, string> = {
+              '.html': 'text/html',
+              '.js': 'application/javascript',
+              '.css': 'text/css',
+              '.json': 'application/json',
+              '.png': 'image/png',
+              '.svg': 'image/svg+xml',
+            }
+            res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream')
+            fs.createReadStream(filePath).pipe(res)
+            return
+          }
+        }
+        next()
+      })
+    },
+  }
+}
+
 export function dvhToVh(): Plugin {
   return {
     name: 'dvh-to-vh',
@@ -156,6 +191,7 @@ export default defineConfig(({ mode }) => {
         react({}),
         dvhToVh(),
         isWeb ? injectBaseTag() : undefined,
+        servePlugins(),
         visualizer({
           filename: 'release/app/dist/renderer/stats.html',
           open: false,

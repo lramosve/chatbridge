@@ -66,6 +66,9 @@ async function initializeApp() {
     Sentry.captureException(e as Error)
   }
 
+  // Bootstrap plugins (load manifests, register tools)
+  import('./setup/plugin_bootstrap').then((m) => m.bootstrapPlugins())
+
   // 最后执行 storage 清理，清理不 block 进入UI
   import('./setup/storage_clear')
 

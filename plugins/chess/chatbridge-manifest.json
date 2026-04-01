@@ -1,0 +1,74 @@
+{
+  "id": "chess",
+  "name": "Chess",
+  "description": "Play an interactive chess game. The AI can analyze board positions, suggest moves, and discuss strategy.",
+  "version": "1.0.0",
+  "author": "ChatBridge",
+  "entryUrl": "/plugins/chess/index.html",
+  "tools": [
+    {
+      "name": "start_game",
+      "description": "Start a new chess game. Use this when the user wants to play chess.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "playerColor": {
+            "type": "string",
+            "description": "The color the user plays as",
+            "enum": ["white", "black"],
+            "default": "white"
+          }
+        },
+        "required": []
+      },
+      "returnType": {
+        "type": "object",
+        "description": "The initial board state as a FEN string"
+      }
+    },
+    {
+      "name": "make_move",
+      "description": "Make a chess move on the board. Use standard algebraic notation (e.g., e4, Nf3, O-O).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "move": {
+            "type": "string",
+            "description": "The move in standard algebraic notation (e.g., e4, Nf3, Bxc6, O-O)"
+          }
+        },
+        "required": ["move"]
+      },
+      "returnType": {
+        "type": "object",
+        "description": "The updated board state and move result"
+      }
+    },
+    {
+      "name": "get_board_state",
+      "description": "Get the current board state. Use this when the user asks about the position or wants move suggestions.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "returnType": {
+        "type": "object",
+        "description": "Current board state including FEN, move history, and game status"
+      }
+    },
+    {
+      "name": "resign_game",
+      "description": "Resign the current game.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  ],
+  "auth": {
+    "type": "none"
+  },
+  "toolTimeout": 5000
+}
