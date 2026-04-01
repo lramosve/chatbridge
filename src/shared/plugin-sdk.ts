@@ -30,14 +30,24 @@ interface RestoreStateMessage extends BaseMessage {
   lastStateSummary: unknown
 }
 
-type PlatformMessage = ToolInvokeMessage | RestoreStateMessage
+interface FetchResponseMessage extends BaseMessage {
+  type: 'FETCH_RESPONSE'
+  status: number
+  ok: boolean
+  data: unknown
+  errorMessage?: string
+}
+
+type PlatformMessage = ToolInvokeMessage | RestoreStateMessage | FetchResponseMessage
 
 type ToolHandler = (parameters: Record<string, unknown>) => Promise<unknown> | unknown
+type FetchPending = { resolve: (value: { status: number; ok: boolean; data: unknown }) => void; reject: (err: Error) => void }
 
 export class ChatBridgePlugin {
   private seq = 0
   private toolHandlers = new Map<string, ToolHandler>()
   private restoreHandler: ((state: unknown) => void) | null = null
+  private fetchPending = new Map<string, FetchPending>()
 
   constructor(public readonly pluginId: string) {
     window.addEventListener('message', this.handleMessage)
@@ -88,6 +98,35 @@ export class ChatBridgePlugin {
       pluginId: this.pluginId,
       errorMessage,
       errorCode,
+    })
+  }
+
+  /**
+   * Fetch a URL via the platform's fetch proxy.
+   * Use this instead of direct fetch() since sandboxed iframes
+   * without allow-same-origin cannot make cross-origin requests.
+   */
+  async fetch(url: string, options?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<{ status: number; ok: boolean; data: unknown }> {
+    const correlationId = crypto.randomUUID()
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.fetchPending.delete(correlationId)
+        reject(new Error(`Fetch proxy timeout for ${url}`))
+      }, 30_000)
+
+      this.fetchPending.set(correlationId, {
+        resolve: (value) => { clearTimeout(timeout); resolve(value) },
+        reject: (err) => { clearTimeout(timeout); reject(err) },
+      })
+
+      this.send({
+        type: 'FETCH_REQUEST',
+        pluginId: this.pluginId,
+        correlationId,
+        url,
+        options,
+      })
     })
   }
 
@@ -147,6 +186,18 @@ export class ChatBridgePlugin {
 
     if (msg.type === 'RESTORE_STATE' && this.restoreHandler) {
       this.restoreHandler(msg.lastStateSummary)
+    }
+
+    if (msg.type === 'FETCH_RESPONSE') {
+      const pending = this.fetchPending.get(msg.correlationId)
+      if (pending) {
+        this.fetchPending.delete(msg.correlationId)
+        if (msg.errorMessage) {
+          pending.reject(new Error(msg.errorMessage))
+        } else {
+          pending.resolve({ status: msg.status, ok: msg.ok, data: msg.data })
+        }
+      }
     }
   }
 }

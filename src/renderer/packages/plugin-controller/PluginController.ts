@@ -1,6 +1,7 @@
 import type { PluginManifest } from '@shared/types/plugin'
 import type {
   AppToPlatformMessage,
+  FetchRequestMessage,
   PlatformToAppMessage,
   ToolResultMessage,
 } from '@shared/types/pluginMessages'
@@ -184,6 +185,55 @@ export class PluginController {
         this.onAppError(msg.pluginId, msg.errorMessage, msg.errorCode)
         break
       }
+
+      case 'FETCH_REQUEST': {
+        this.handleFetchProxy(msg as FetchRequestMessage, event.source as Window)
+        break
+      }
+    }
+  }
+
+  /** Proxy fetch requests from sandboxed iframes */
+  private async handleFetchProxy(msg: FetchRequestMessage, source: Window) {
+    try {
+      const response = await fetch(msg.url, {
+        method: msg.options?.method || 'GET',
+        headers: msg.options?.headers,
+        body: msg.options?.body,
+      })
+
+      let data: unknown
+      const contentType = response.headers.get('content-type') || ''
+      if (contentType.includes('application/json')) {
+        data = await response.json()
+      } else {
+        data = await response.text()
+      }
+
+      const reply: PlatformToAppMessage = {
+        protocol: 'chatbridge',
+        type: 'FETCH_RESPONSE',
+        correlationId: msg.correlationId,
+        timestamp: new Date().toISOString(),
+        seq: this.seq++,
+        status: response.status,
+        ok: response.ok,
+        data,
+      }
+      source.postMessage(reply, '*')
+    } catch (err) {
+      const reply: PlatformToAppMessage = {
+        protocol: 'chatbridge',
+        type: 'FETCH_RESPONSE',
+        correlationId: msg.correlationId,
+        timestamp: new Date().toISOString(),
+        seq: this.seq++,
+        status: 0,
+        ok: false,
+        data: null,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      }
+      source.postMessage(reply, '*')
     }
   }
 }

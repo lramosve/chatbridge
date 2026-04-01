@@ -30,7 +30,15 @@ export interface RestoreStateMessage extends BaseMessage {
   lastStateSummary: unknown
 }
 
-export type PlatformToAppMessage = ToolInvokeMessage | RestoreStateMessage
+export interface FetchResponseMessage extends BaseMessage {
+  type: 'FETCH_RESPONSE'
+  status: number
+  ok: boolean
+  data: unknown
+  errorMessage?: string
+}
+
+export type PlatformToAppMessage = ToolInvokeMessage | RestoreStateMessage | FetchResponseMessage
 
 // ── App → Platform Messages ──
 
@@ -70,12 +78,24 @@ export interface AppErrorMessage extends BaseMessage {
   errorCode?: string
 }
 
+export interface FetchRequestMessage extends BaseMessage {
+  type: 'FETCH_REQUEST'
+  pluginId: string
+  url: string
+  options?: {
+    method?: string
+    headers?: Record<string, string>
+    body?: string
+  }
+}
+
 export type AppToPlatformMessage =
   | AppReadyMessage
   | ToolResultMessage
   | StateUpdateMessage
   | AppCompleteMessage
   | AppErrorMessage
+  | FetchRequestMessage
 
 export type PluginMessage = PlatformToAppMessage | AppToPlatformMessage
 

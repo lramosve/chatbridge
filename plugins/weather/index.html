@@ -104,19 +104,48 @@
     }
 
     // ── ChatBridge Protocol ──
+    const fetchPending = new Map();
+
     function send(payload) {
       window.parent.postMessage({
         protocol: 'chatbridge',
-        correlationId: crypto.randomUUID(),
+        correlationId: payload.correlationId || crypto.randomUUID(),
         timestamp: new Date().toISOString(),
         seq: seq++,
         ...payload
       }, '*');
     }
 
+    // Proxy fetch through the platform (sandboxed iframes can't fetch cross-origin)
+    function bridgeFetch(url, options) {
+      const correlationId = crypto.randomUUID();
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          fetchPending.delete(correlationId);
+          reject(new Error('Fetch proxy timeout'));
+        }, 15000);
+        fetchPending.set(correlationId, {
+          resolve: (val) => { clearTimeout(timeout); resolve(val); },
+          reject: (err) => { clearTimeout(timeout); reject(err); }
+        });
+        send({ type: 'FETCH_REQUEST', pluginId: 'weather', correlationId, url, options });
+      });
+    }
+
     window.addEventListener('message', async (event) => {
       const data = event.data;
       if (!data || data.protocol !== 'chatbridge') return;
+
+      // Handle fetch proxy responses
+      if (data.type === 'FETCH_RESPONSE') {
+        const pending = fetchPending.get(data.correlationId);
+        if (pending) {
+          fetchPending.delete(data.correlationId);
+          if (data.errorMessage) pending.reject(new Error(data.errorMessage));
+          else pending.resolve({ ok: data.ok, status: data.status, data: data.data });
+        }
+        return;
+      }
 
       if (data.type === 'TOOL_INVOKE') {
         try {
@@ -153,9 +182,9 @@
 
     // ── API Calls ──
     async function fetchWeather(city, includeForecast) {
-      // Geocode the city
-      const geoRes = await fetch(`${GEOCODE_URL}?name=${encodeURIComponent(city)}&count=1`);
-      const geoData = await geoRes.json();
+      // Geocode the city via platform fetch proxy
+      const geoRes = await bridgeFetch(`${GEOCODE_URL}?name=${encodeURIComponent(city)}&count=1`);
+      const geoData = geoRes.data;
       if (!geoData.results || geoData.results.length === 0) {
         throw new Error(`City "${city}" not found. Try a different spelling.`);
       }
@@ -176,8 +205,8 @@
         params.append('forecast_days', '3');
       }
 
-      const weatherRes = await fetch(`${WEATHER_URL}?${params}`);
-      const weatherData = await weatherRes.json();
+      const weatherRes = await bridgeFetch(`${WEATHER_URL}?${params}`);
+      const weatherData = weatherRes.data;
 
       const current = weatherData.current;
       const condition = getCondition(current.weather_code);
