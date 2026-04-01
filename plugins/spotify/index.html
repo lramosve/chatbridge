@@ -84,7 +84,11 @@
   </div>
 
   <div class="auth-banner" id="authBanner">
-    <p style="color: #b3b3b3; font-size: 13px; margin-bottom: 8px;">Connect your Spotify account to create playlists</p>
+    <p id="authMsg" style="color: #b3b3b3; font-size: 13px; margin-bottom: 8px;">Connect your Spotify account to create playlists</p>
+    <div id="clientIdRow" style="display:flex;gap:8px;margin-bottom:8px;justify-content:center;">
+      <input type="text" id="clientIdInput" placeholder="Spotify Client ID (or leave empty for demo)"
+        style="padding:8px 12px;background:#181818;border:1px solid #404040;border-radius:8px;color:#fff;font-size:12px;width:280px;outline:none;">
+    </div>
     <button class="auth-btn" id="authBtn" onclick="handleAuth()">Connect Spotify</button>
   </div>
 
@@ -101,12 +105,12 @@
 
   <script>
     // ── Spotify OAuth Config (PKCE) ──
-    // In production, these come from environment. For the demo, they're configurable.
-    const SPOTIFY_CLIENT_ID = ''; // Set via env or config
     const REDIRECT_URI = window.location.origin + '/plugins/spotify/callback.html';
     const SCOPES = 'playlist-modify-public playlist-modify-private';
 
     let seq = 0;
+    let spotifyClientId = '';
+    let codeVerifier = null; // stored in JS variable (sessionStorage unavailable in sandbox)
     let accessToken = null;
     let userProfile = null;
     let searchResults = [];
@@ -155,17 +159,9 @@
         return;
       }
 
-      // Handle OAuth callback message from popup
-      if (data.type === 'spotify-auth-callback' && data.accessToken) {
-        accessToken = data.accessToken;
-        await loadProfile();
-        updateAuthUI();
-        send({
-          type: 'STATE_UPDATE',
-          pluginId: 'spotify',
-          stateSummary: { authenticated: true, user: userProfile?.display_name },
-          description: `Spotify connected as ${userProfile?.display_name || 'user'}`
-        });
+      // Handle OAuth callback from popup (receives auth code)
+      if (data.type === 'spotify-auth-code' && data.code) {
+        await exchangeCodeForToken(data.code);
         return;
       }
 
@@ -207,16 +203,21 @@
         // Disconnect
         accessToken = null;
         userProfile = null;
+        spotifyClientId = '';
+        document.getElementById('clientIdRow').style.display = 'flex';
         updateAuthUI();
         return;
       }
 
-      if (!SPOTIFY_CLIENT_ID) {
+      spotifyClientId = document.getElementById('clientIdInput').value.trim();
+
+      if (!spotifyClientId) {
         // Demo mode: simulate auth
         accessToken = 'demo-token';
         userProfile = { display_name: 'Demo User', id: 'demo' };
+        document.getElementById('clientIdRow').style.display = 'none';
         updateAuthUI();
-        showStatus('Connected in demo mode (no Spotify client ID configured)');
+        showStatus('Connected in demo mode (no Client ID entered)');
         send({
           type: 'STATE_UPDATE',
           pluginId: 'spotify',
@@ -227,25 +228,67 @@
       }
 
       // Real PKCE flow
-      const codeVerifier = generateCodeVerifier();
-      sessionStorage.setItem('spotify_code_verifier', codeVerifier);
+      codeVerifier = generateCodeVerifier();
 
-      generateCodeChallenge(codeVerifier).then(codeChallenge => {
+      generateCodeChallenge(codeVerifier).then(challenge => {
         const params = new URLSearchParams({
-          client_id: SPOTIFY_CLIENT_ID,
+          client_id: spotifyClientId,
           response_type: 'code',
           redirect_uri: REDIRECT_URI,
           scope: SCOPES,
           code_challenge_method: 'S256',
-          code_challenge: codeChallenge,
+          code_challenge: challenge,
         });
-        // Open popup for OAuth
         window.open(
           `https://accounts.spotify.com/authorize?${params}`,
           'spotify-auth',
           'width=500,height=700'
         );
       });
+    }
+
+    async function exchangeCodeForToken(code) {
+      if (!codeVerifier || !spotifyClientId) {
+        showStatus('Missing OAuth state. Try connecting again.', true);
+        return;
+      }
+      try {
+        showStatus('Exchanging auth code for token...');
+        const body = new URLSearchParams({
+          client_id: spotifyClientId,
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: REDIRECT_URI,
+          code_verifier: codeVerifier,
+        }).toString();
+
+        const res = await bridgeFetch('https://accounts.spotify.com/api/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+        });
+
+        if (!res.ok) {
+          showStatus('Token exchange failed: ' + (res.data?.error_description || 'unknown error'), true);
+          return;
+        }
+
+        accessToken = res.data.access_token;
+        codeVerifier = null;
+        document.getElementById('clientIdRow').style.display = 'none';
+
+        await loadProfile();
+        updateAuthUI();
+        showStatus(`Connected as ${userProfile?.display_name || 'Spotify User'}`);
+        send({
+          type: 'STATE_UPDATE',
+          pluginId: 'spotify',
+          stateSummary: { authenticated: true, user: userProfile?.display_name },
+          description: `Spotify connected as ${userProfile?.display_name || 'user'}`
+        });
+      } catch (err) {
+        showStatus('Token exchange error: ' + err.message, true);
+      }
     }
 
     function generateCodeVerifier() {

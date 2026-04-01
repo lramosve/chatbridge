@@ -1,32 +1,28 @@
 <!DOCTYPE html>
 <html>
 <head><title>Spotify Auth Callback</title></head>
-<body>
-  <p>Connecting to Spotify...</p>
+<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#121212;color:#fff;">
+  <div id="msg" style="text-align:center;">
+    <p>Connecting to Spotify...</p>
+  </div>
   <script>
-    // Handle the OAuth callback
-    // The authorization code is in the URL params
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const error = params.get('error');
 
     if (error) {
-      document.body.innerHTML = '<p>Authorization denied. You can close this window.</p>';
+      document.getElementById('msg').innerHTML = '<p>Authorization denied.</p><p style="color:#b3b3b3;font-size:13px;">You can close this window.</p>';
     } else if (code) {
-      // Exchange code for token using PKCE
-      // In a real app, the code verifier would be stored in the opener's sessionStorage
-      // and the token exchange would happen server-side for security.
-      // For this demo, we send the code to the parent iframe.
+      // Send auth code back to the iframe (opener)
       if (window.opener) {
-        window.opener.postMessage({
-          type: 'spotify-auth-code',
-          code: code
-        }, '*');
+        window.opener.postMessage({ type: 'spotify-auth-code', code }, '*');
+        document.getElementById('msg').innerHTML = '<p style="color:#1db954;">Connected! Closing...</p>';
+        setTimeout(() => window.close(), 1000);
+      } else {
+        document.getElementById('msg').innerHTML = '<p>Could not communicate with ChatBridge.</p><p style="color:#b3b3b3;font-size:13px;">Please close this window and try again.</p>';
       }
-      document.body.innerHTML = '<p>Connected! You can close this window.</p>';
-      setTimeout(() => window.close(), 1500);
     } else {
-      document.body.innerHTML = '<p>No authorization code received.</p>';
+      document.getElementById('msg').innerHTML = '<p>No authorization code received.</p>';
     }
   </script>
 </body>
