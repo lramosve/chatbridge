@@ -7,7 +7,7 @@
 import type { PluginManifest } from '@shared/types/plugin'
 import { usePluginStore } from '@/stores/pluginStore'
 
-const BUILT_IN_PLUGINS = ['chess']
+const BUILT_IN_PLUGINS = ['chess', 'weather']
 
 export async function bootstrapPlugins() {
   const store = usePluginStore.getState()

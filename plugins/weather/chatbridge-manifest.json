@@ -1,0 +1,50 @@
+{
+  "id": "weather",
+  "name": "Weather Dashboard",
+  "description": "Get current weather conditions and forecasts for any city. Use this when the user asks about weather.",
+  "version": "1.0.0",
+  "author": "ChatBridge",
+  "entryUrl": "/plugins/weather/index.html",
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get the current weather for a city. Use this when the user asks about weather conditions.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "The city name (e.g., 'London', 'New York', 'Tokyo')"
+          }
+        },
+        "required": ["city"]
+      },
+      "returnType": {
+        "type": "object",
+        "description": "Current weather data including temperature, conditions, humidity, and wind"
+      }
+    },
+    {
+      "name": "get_forecast",
+      "description": "Get a 3-day weather forecast for a city.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "The city name"
+          }
+        },
+        "required": ["city"]
+      },
+      "returnType": {
+        "type": "object",
+        "description": "3-day forecast with daily high/low temperatures and conditions"
+      }
+    }
+  ],
+  "auth": {
+    "type": "none"
+  },
+  "toolTimeout": 10000
+}

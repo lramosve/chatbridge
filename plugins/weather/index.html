@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weather - ChatBridge Plugin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 16px;
+      background: #f8fafc;
+      color: #1a1a2e;
+    }
+    .weather-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px;
+      padding: 24px;
+      color: white;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .weather-card.sunny { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
+    .weather-card.cloudy { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); color: #333; }
+    .weather-card.rainy { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+    .weather-card.snowy { background: linear-gradient(135deg, #e6e9f0 0%, #eef1f5 100%); color: #333; }
+    .city-name { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+    .temp { font-size: 48px; font-weight: 700; margin: 8px 0; }
+    .condition { font-size: 16px; opacity: 0.9; margin-bottom: 16px; }
+    .details { display: flex; gap: 16px; font-size: 13px; opacity: 0.85; }
+    .details div { display: flex; flex-direction: column; gap: 2px; }
+    .details .label { font-size: 11px; text-transform: uppercase; opacity: 0.7; }
+    .forecast {
+      display: flex; gap: 8px; margin-top: 16px;
+      padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.3);
+    }
+    .forecast-day {
+      flex: 1; text-align: center; font-size: 12px;
+    }
+    .forecast-day .day-name { font-weight: 600; margin-bottom: 4px; }
+    .forecast-day .day-icon { font-size: 20px; margin: 4px 0; }
+    .forecast-day .day-temps { opacity: 0.85; }
+    .empty {
+      text-align: center; padding: 40px; color: #94a3b8;
+      font-size: 14px;
+    }
+    .search {
+      display: flex; gap: 8px; max-width: 400px; margin: 0 auto 16px;
+    }
+    .search input {
+      flex: 1; padding: 8px 12px; border: 1px solid #e2e8f0;
+      border-radius: 6px; font-size: 14px; outline: none;
+    }
+    .search input:focus { border-color: #667eea; }
+    .search button {
+      padding: 8px 16px; background: #667eea; color: white;
+      border: none; border-radius: 6px; cursor: pointer; font-size: 14px;
+    }
+    .search button:hover { background: #5a6fd6; }
+  </style>
+</head>
+<body>
+  <div class="search">
+    <input type="text" id="cityInput" placeholder="Enter city name..." onkeydown="if(event.key==='Enter')searchWeather()">
+    <button onclick="searchWeather()">Search</button>
+  </div>
+  <div id="content">
+    <div class="empty">Ask the chatbot about weather, or search for a city above.</div>
+  </div>
+
+  <script>
+    // ── Open-Meteo API (free, no key needed) ──
+    const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
+    const WEATHER_URL = 'https://api.open-meteo.com/v1/forecast';
+
+    let seq = 0;
+    let currentData = null;
+
+    // ── Weather condition mapping ──
+    const WMO_CODES = {
+      0: { desc: 'Clear sky', icon: '☀️', theme: 'sunny' },
+      1: { desc: 'Mainly clear', icon: '🌤️', theme: 'sunny' },
+      2: { desc: 'Partly cloudy', icon: '⛅', theme: 'cloudy' },
+      3: { desc: 'Overcast', icon: '☁️', theme: 'cloudy' },
+      45: { desc: 'Foggy', icon: '🌫️', theme: 'cloudy' },
+      48: { desc: 'Depositing rime fog', icon: '🌫️', theme: 'cloudy' },
+      51: { desc: 'Light drizzle', icon: '🌦️', theme: 'rainy' },
+      53: { desc: 'Moderate drizzle', icon: '🌦️', theme: 'rainy' },
+      55: { desc: 'Dense drizzle', icon: '🌧️', theme: 'rainy' },
+      61: { desc: 'Slight rain', icon: '🌧️', theme: 'rainy' },
+      63: { desc: 'Moderate rain', icon: '🌧️', theme: 'rainy' },
+      65: { desc: 'Heavy rain', icon: '🌧️', theme: 'rainy' },
+      71: { desc: 'Slight snow', icon: '🌨️', theme: 'snowy' },
+      73: { desc: 'Moderate snow', icon: '❄️', theme: 'snowy' },
+      75: { desc: 'Heavy snow', icon: '❄️', theme: 'snowy' },
+      80: { desc: 'Slight rain showers', icon: '🌦️', theme: 'rainy' },
+      81: { desc: 'Moderate rain showers', icon: '🌧️', theme: 'rainy' },
+      82: { desc: 'Violent rain showers', icon: '⛈️', theme: 'rainy' },
+      95: { desc: 'Thunderstorm', icon: '⛈️', theme: 'rainy' },
+    };
+
+    function getCondition(code) {
+      return WMO_CODES[code] || { desc: 'Unknown', icon: '🌡️', theme: '' };
+    }
+
+    // ── ChatBridge Protocol ──
+    function send(payload) {
+      window.parent.postMessage({
+        protocol: 'chatbridge',
+        correlationId: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        seq: seq++,
+        ...payload
+      }, '*');
+    }
+
+    window.addEventListener('message', async (event) => {
+      const data = event.data;
+      if (!data || data.protocol !== 'chatbridge') return;
+
+      if (data.type === 'TOOL_INVOKE') {
+        try {
+          let result;
+          if (data.toolName === 'get_weather') {
+            result = await fetchWeather(data.parameters.city, false);
+          } else if (data.toolName === 'get_forecast') {
+            result = await fetchWeather(data.parameters.city, true);
+          } else {
+            throw new Error(`Unknown tool: ${data.toolName}`);
+          }
+          send({
+            type: 'TOOL_RESULT',
+            correlationId: data.correlationId,
+            status: 'success',
+            data: result
+          });
+        } catch (err) {
+          send({
+            type: 'TOOL_RESULT',
+            correlationId: data.correlationId,
+            status: 'error',
+            data: null,
+            errorMessage: err.message
+          });
+        }
+      }
+
+      if (data.type === 'RESTORE_STATE' && data.lastStateSummary) {
+        currentData = data.lastStateSummary;
+        renderWeather(currentData);
+      }
+    });
+
+    // ── API Calls ──
+    async function fetchWeather(city, includeForecast) {
+      // Geocode the city
+      const geoRes = await fetch(`${GEOCODE_URL}?name=${encodeURIComponent(city)}&count=1`);
+      const geoData = await geoRes.json();
+      if (!geoData.results || geoData.results.length === 0) {
+        throw new Error(`City "${city}" not found. Try a different spelling.`);
+      }
+
+      const { latitude, longitude, name, country } = geoData.results[0];
+
+      // Fetch weather
+      const params = new URLSearchParams({
+        latitude: latitude.toString(),
+        longitude: longitude.toString(),
+        current: 'temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code',
+        temperature_unit: 'fahrenheit',
+        wind_speed_unit: 'mph',
+      });
+
+      if (includeForecast) {
+        params.append('daily', 'temperature_2m_max,temperature_2m_min,weather_code');
+        params.append('forecast_days', '3');
+      }
+
+      const weatherRes = await fetch(`${WEATHER_URL}?${params}`);
+      const weatherData = await weatherRes.json();
+
+      const current = weatherData.current;
+      const condition = getCondition(current.weather_code);
+
+      const result = {
+        city: name,
+        country,
+        temperature: Math.round(current.temperature_2m),
+        unit: '°F',
+        condition: condition.desc,
+        icon: condition.icon,
+        theme: condition.theme,
+        humidity: current.relative_humidity_2m,
+        windSpeed: Math.round(current.wind_speed_10m),
+        windUnit: 'mph',
+      };
+
+      if (includeForecast && weatherData.daily) {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        result.forecast = weatherData.daily.time.map((date, i) => {
+          const d = new Date(date + 'T12:00:00');
+          const fc = getCondition(weatherData.daily.weather_code[i]);
+          return {
+            day: days[d.getDay()],
+            high: Math.round(weatherData.daily.temperature_2m_max[i]),
+            low: Math.round(weatherData.daily.temperature_2m_min[i]),
+            condition: fc.desc,
+            icon: fc.icon,
+          };
+        });
+      }
+
+      currentData = result;
+      renderWeather(result);
+
+      send({
+        type: 'STATE_UPDATE',
+        pluginId: 'weather',
+        stateSummary: result,
+        description: `Weather in ${result.city}: ${result.temperature}${result.unit}, ${result.condition}`
+      });
+
+      return result;
+    }
+
+    // ── Rendering ──
+    function renderWeather(data) {
+      const content = document.getElementById('content');
+      let forecastHTML = '';
+
+      if (data.forecast) {
+        forecastHTML = `
+          <div class="forecast">
+            ${data.forecast.map(f => `
+              <div class="forecast-day">
+                <div class="day-name">${f.day}</div>
+                <div class="day-icon">${f.icon}</div>
+                <div class="day-temps">${f.high}° / ${f.low}°</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      content.innerHTML = `
+        <div class="weather-card ${data.theme || ''}">
+          <div class="city-name">${data.city}, ${data.country}</div>
+          <div class="condition">${data.icon} ${data.condition}</div>
+          <div class="temp">${data.temperature}${data.unit}</div>
+          <div class="details">
+            <div><span class="label">Humidity</span>${data.humidity}%</div>
+            <div><span class="label">Wind</span>${data.windSpeed} ${data.windUnit}</div>
+          </div>
+          ${forecastHTML}
+        </div>
+      `;
+    }
+
+    function searchWeather() {
+      const input = document.getElementById('cityInput');
+      const city = input.value.trim();
+      if (city) {
+        fetchWeather(city, true).catch(err => {
+          document.getElementById('content').innerHTML = `
+            <div class="empty" style="color: #ef4444;">${err.message}</div>
+          `;
+        });
+      }
+    }
+
+    // ── Init ──
+    send({ type: 'APP_READY', pluginId: 'weather' });
+  </script>
+</body>
+</html>
