@@ -123,7 +123,19 @@ export function getPluginToolSetDescription(): string {
     const toolDescs = p.manifest.tools
       .map((t) => `  - ${p.manifest.id}__${t.name}: ${t.description}`)
       .join('\n')
-    return `## ${p.manifest.name}\n${p.manifest.description}\n${toolDescs}`
+
+    // Include active state from STATE_UPDATE if available
+    let stateInfo = ''
+    const sessions = store.sessions
+    for (const key of Object.keys(sessions)) {
+      if (key.endsWith(`:${p.manifest.id}`) && sessions[key].lastStateSummary) {
+        const summary = sessions[key].lastStateSummary
+        stateInfo = `\nCurrent state: ${typeof summary === 'string' ? summary : JSON.stringify(summary)}`
+        break
+      }
+    }
+
+    return `## ${p.manifest.name}\n${p.manifest.description}\n${toolDescs}${stateInfo}`
   })
 
   return `\nAvailable third-party apps:\n${descriptions.join('\n\n')}\n`

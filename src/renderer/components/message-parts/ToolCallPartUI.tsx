@@ -221,16 +221,12 @@ export const ToolCallPartUI: FC<{ part: MessageToolCallPart }> = ({ part }) => {
     return (
       <>
         <GeneralToolCallUI part={part} />
-        <PluginToolCallUI pluginId={pluginId} />
+        <PluginMessage pluginId={pluginId} conversationId="active" />
       </>
     )
   }
 
   return <GeneralToolCallUI part={part} />
-}
-
-const PluginToolCallUI: FC<{ pluginId: string }> = ({ pluginId }) => {
-  return <PluginMessage pluginId={pluginId} conversationId="active" />
 }
 
 export const ReasoningContentUI: FC<{
