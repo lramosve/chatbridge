@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm build:web",
+  "buildCommand": "pnpm build:vercel",
   "outputDirectory": "release/app/dist/renderer",
   "installCommand": "pnpm install --ignore-scripts",
   "framework": null,
