@@ -127,6 +127,8 @@
         stateSummary: {
           fen: game.fen(),
           turn: game.turn() === 'w' ? 'white' : 'black',
+          playerColor,
+          aiColor: playerColor === 'white' ? 'black' : 'white',
           moveCount: game.history().length,
           inCheck: game.in_check(),
           isGameOver: game.game_over(),
@@ -264,15 +266,20 @@
     }
 
     function handleGetBoardState() {
+      const turn = game.turn() === 'w' ? 'white' : 'black';
+      const aiColor = playerColor === 'white' ? 'black' : 'white';
       return {
         fen: game.fen(),
-        turn: game.turn() === 'w' ? 'white' : 'black',
+        turn,
+        playerColor,
+        aiColor,
         moveCount: game.history().length,
         history: game.history(),
         legalMoves: game.moves(),
         inCheck: game.in_check(),
         isGameOver: game.game_over(),
-        status: getStatusText()
+        status: getStatusText(),
+        instruction: `The user plays ${playerColor}. You (AI) play ${aiColor}. It is ${turn}'s turn.${turn === aiColor ? ' Call make_move now with your move.' : ' Wait for the user to move on the board.'}`
       };
     }
 
