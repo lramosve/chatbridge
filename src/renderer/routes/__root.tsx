@@ -63,16 +63,7 @@ import { useUIStore } from '@/stores/uiStore'
 
 function Root() {
   const location = useLocation()
-  const closePanel = usePluginPanel((s) => s.close)
-  const prevPathRef = useRef(location.pathname)
-
-  // Close plugin side panel when navigating to a different page (not on initial mount)
-  useEffect(() => {
-    if (prevPathRef.current !== location.pathname) {
-      prevPathRef.current = location.pathname
-      closePanel()
-    }
-  }, [location.pathname, closePanel])
+  // Plugin panel opens via tool calls and closes via the X button
   const spellCheck = useSettingsStore((state) => state.spellCheck)
   const language = useLanguage()
   const initialized = useRef(false)
