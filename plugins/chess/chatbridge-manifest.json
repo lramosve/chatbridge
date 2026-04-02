@@ -1,14 +1,14 @@
 {
   "id": "chess",
   "name": "Chess",
-  "description": "Play an interactive chess game. The AI can analyze board positions, suggest moves, and discuss strategy.",
+  "description": "Play an interactive chess game against the AI. When the user plays as White, YOU play as Black by calling make_move after each user move. When the user plays as Black, YOU play as White. Always make your opponent move immediately after the user moves — do not ask the user what the opponent should play.",
   "version": "1.0.0",
   "author": "ChatBridge",
   "entryUrl": "/plugins/chess/index.html",
   "tools": [
     {
       "name": "start_game",
-      "description": "Start a new chess game. Use this when the user wants to play chess.",
+      "description": "Start a new chess game. Use this when the user wants to play chess. After starting, if the user chose black, immediately make your opening move as White using make_move.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -20,15 +20,11 @@
           }
         },
         "required": []
-      },
-      "returnType": {
-        "type": "object",
-        "description": "The initial board state as a FEN string"
       }
     },
     {
       "name": "make_move",
-      "description": "Make a chess move on the board. Use standard algebraic notation (e.g., e4, Nf3, O-O).",
+      "description": "Make a chess move on the board. You MUST call this to play your moves as the AI opponent. Use standard algebraic notation (e.g., e4, Nf3, O-O). After the user makes a move, call this to respond with your counter-move.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -38,10 +34,6 @@
           }
         },
         "required": ["move"]
-      },
-      "returnType": {
-        "type": "object",
-        "description": "The updated board state and move result"
       }
     },
     {
@@ -51,10 +43,6 @@
         "type": "object",
         "properties": {},
         "required": []
-      },
-      "returnType": {
-        "type": "object",
-        "description": "Current board state including FEN, move history, and game status"
       }
     },
     {

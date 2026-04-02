@@ -212,10 +212,12 @@
       renderBoard();
       updateStatus();
       sendStateUpdate();
+      const aiColor = playerColor === 'white' ? 'black' : 'white';
       return {
         fen: game.fen(),
         playerColor,
-        message: `New game started. You are playing as ${playerColor}.`
+        aiColor,
+        message: `New game started. User plays ${playerColor}. YOU (the AI) play as ${aiColor}. Call make_move to play your moves as ${aiColor}. ${playerColor === 'black' ? 'It is your turn (White) — make your opening move now using make_move.' : 'Wait for the user to make their first move on the board.'}`
       };
     }
 
@@ -234,16 +236,18 @@
       updateStatus();
       sendStateUpdate();
 
+      const nextTurn = game.turn() === 'w' ? 'white' : 'black';
       const result = {
         fen: game.fen(),
         move: move.san,
         from: move.from,
         to: move.to,
         captured: move.captured || null,
-        turn: game.turn() === 'w' ? 'white' : 'black',
+        turn: nextTurn,
         inCheck: game.in_check(),
         isGameOver: game.game_over(),
-        status: getStatusText()
+        status: getStatusText(),
+        instruction: game.game_over() ? 'Game is over.' : `It is now ${nextTurn}'s turn. If ${nextTurn} is your color, call make_move with your response move.`
       };
 
       if (game.game_over()) {
