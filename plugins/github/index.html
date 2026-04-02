@@ -135,9 +135,18 @@
       }
 
       if (data.type === 'RESTORE_STATE' && data.lastStateSummary) {
-        if (data.lastStateSummary.searchResults) {
-          searchResults = data.lastStateSummary.searchResults;
+        const s = data.lastStateSummary;
+        if (s.searchResults) {
+          searchResults = s.searchResults;
           renderRepos();
+        }
+        if (s.accessToken) {
+          accessToken = s.accessToken;
+          userProfile = s.userProfile || null;
+          githubClientId = s.clientId || '';
+          githubClientSecret = s.clientSecret || '';
+          document.getElementById('authInputs').style.display = 'none';
+          updateAuthUI();
         }
       }
     });
@@ -198,7 +207,7 @@
         showStatus(`Connected as ${userProfile?.login || 'GitHub User'}`);
         send({
           type: 'STATE_UPDATE', pluginId: 'github',
-          stateSummary: { authenticated: true, user: userProfile?.login },
+          stateSummary: { authenticated: true, user: userProfile?.login, accessToken, userProfile, clientId: githubClientId, clientSecret: githubClientSecret },
           description: `GitHub connected as ${userProfile?.login || 'user'}`
         });
       } catch (err) {
@@ -254,7 +263,7 @@
       renderRepos();
       send({
         type: 'STATE_UPDATE', pluginId: 'github',
-        stateSummary: { searchResults, query },
+        stateSummary: { searchResults, query, accessToken, userProfile, clientId: githubClientId, clientSecret: githubClientSecret },
         description: `Found ${searchResults.length} repos for "${query}"`
       });
       return { query, repos: searchResults, count: searchResults.length };
