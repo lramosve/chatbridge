@@ -64,10 +64,14 @@ import { useUIStore } from '@/stores/uiStore'
 function Root() {
   const location = useLocation()
   const closePanel = usePluginPanel((s) => s.close)
+  const prevPathRef = useRef(location.pathname)
 
-  // Close plugin side panel when navigating to a new chat
+  // Close plugin side panel when navigating to a different page (not on initial mount)
   useEffect(() => {
-    closePanel()
+    if (prevPathRef.current !== location.pathname) {
+      prevPathRef.current = location.pathname
+      closePanel()
+    }
   }, [location.pathname, closePanel])
   const spellCheck = useSettingsStore((state) => state.spellCheck)
   const language = useLanguage()
