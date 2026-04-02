@@ -60,7 +60,9 @@
 ---
 
 ## Scene 5: Architecture (3:50 - 4:30)
-**Say while showing the side panel:**
+**Switch to:** `docs/architecture-slide.html` in the browser (or the deployed version)
+
+**Say while showing the architecture slide:**
 
 "Three design decisions define this architecture:
 
