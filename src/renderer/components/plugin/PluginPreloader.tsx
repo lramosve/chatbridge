@@ -8,6 +8,8 @@ import { useEffect, useMemo } from 'react'
 import { getPluginController } from '@/packages/plugin-controller/PluginController'
 import { usePluginStore } from '@/stores/pluginStore'
 import { usePluginPanel } from '@/stores/pluginPanelStore'
+import { getDefaultStore } from 'jotai'
+import { currentSessionIdAtom } from '@/stores/atoms/sessionAtoms'
 
 /** Find the last state summary for a plugin across all sessions */
 function getLastState(pluginId: string): unknown {
@@ -43,10 +45,28 @@ export function PluginPreloader() {
   )
 
   // Wire up state update handler so STATE_UPDATE messages get persisted
+  // Also auto-trigger LLM when a chess-like app signals it's the AI's turn
   useEffect(() => {
     const pluginStore = usePluginStore.getState()
     controller.onStateUpdate = (pluginId, stateSummary, _description) => {
       pluginStore.updateSessionState('active', pluginId, { lastStateSummary: stateSummary })
+
+      // Auto-submit a message when the app state indicates it's the AI's turn
+      const state = stateSummary as Record<string, unknown> | null
+      if (state?.aiColor && state?.turn === state?.aiColor && state?.lastMove) {
+        const sessionId = getDefaultStore().get(currentSessionIdAtom)
+        if (sessionId) {
+          import('@/stores/session/messages').then(({ submitNewUserMessage }) => {
+            const msg = {
+              id: crypto.randomUUID(),
+              role: 'user' as const,
+              contentParts: [{ type: 'text' as const, text: `I played ${state.lastMove}. Your turn.` }],
+              timestamp: Date.now(),
+            }
+            submitNewUserMessage(sessionId, { newUserMsg: msg, needGenerating: true })
+          })
+        }
+      }
     }
   }, [controller])
 
