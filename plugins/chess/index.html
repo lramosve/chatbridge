@@ -85,6 +85,7 @@
 <body>
   <div class="status" id="status">Click "New Game" or ask the chatbot to start a game.</div>
   <div class="board" id="board"></div>
+  <div id="moveHint" style="display:none;font-size:12px;color:#3b82f6;background:#eff6ff;padding:6px 12px;border-radius:6px;margin-top:8px;text-align:center;max-width:min(400px,90vw);"></div>
   <div class="move-history" id="moveHistory"></div>
   <div class="controls">
     <button onclick="newGame('white')">New Game (White)</button>
@@ -226,6 +227,7 @@
     function handleMakeMove(params) {
       if (!gameActive) throw new Error('No active game. Start a new game first.');
       if (game.game_over()) throw new Error('The game is already over.');
+      document.getElementById('moveHint').style.display = 'none';
 
       const move = game.move(params.move, { sloppy: true });
       if (!move) {
@@ -359,6 +361,11 @@
           updateStatus();
           sendStateUpdate();
 
+          if (!game.game_over()) {
+            // Show hint to prompt the AI
+            showMoveHint(move.san);
+          }
+
           if (game.game_over()) {
             gameActive = false;
             send({
@@ -418,6 +425,12 @@
     function flipBoard() {
       boardFlipped = !boardFlipped;
       renderBoard();
+    }
+
+    function showMoveHint(moveSan) {
+      const hint = document.getElementById('moveHint');
+      hint.textContent = `You played ${moveSan}. Type "your turn" in the chat for the AI to respond.`;
+      hint.style.display = 'block';
     }
 
     // ── Init ──
