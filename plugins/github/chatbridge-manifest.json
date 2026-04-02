@@ -1,0 +1,64 @@
+{
+  "id": "github",
+  "name": "GitHub Gist Creator",
+  "description": "Search GitHub repositories and create Gists. Requires GitHub account authorization.",
+  "version": "1.0.0",
+  "author": "ChatBridge",
+  "entryUrl": "/plugins/github/index.html",
+  "tools": [
+    {
+      "name": "search_repos",
+      "description": "Search GitHub repositories by keyword. Use when the user wants to find repos or code.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query (e.g., 'react state management', 'python web framework')"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "create_gist",
+      "description": "Create a GitHub Gist with code or text. Requires GitHub authorization.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Description of the gist"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Filename for the gist (e.g., 'snippet.js', 'notes.md')"
+          },
+          "content": {
+            "type": "string",
+            "description": "The content of the gist"
+          }
+        },
+        "required": ["description", "filename", "content"]
+      }
+    },
+    {
+      "name": "get_auth_status",
+      "description": "Check if the user has authorized their GitHub account.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  ],
+  "auth": {
+    "type": "oauth2",
+    "oauth2": {
+      "authorizationUrl": "https://github.com/login/oauth/authorize",
+      "tokenUrl": "https://github.com/login/oauth/access_token",
+      "scopes": ["gist", "public_repo"]
+    }
+  },
+  "toolTimeout": 15000
+}

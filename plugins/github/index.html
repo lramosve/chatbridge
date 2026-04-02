@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitHub - ChatBridge Plugin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 16px; background: #0d1117; color: #e6edf3; }
+    .header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .header svg { width: 24px; height: 24px; fill: #e6edf3; }
+    .header h2 { font-size: 18px; color: #58a6ff; }
+    .auth-banner { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 16px; text-align: center; }
+    .auth-banner.connected { border-color: #238636; }
+    .auth-inputs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; align-items: center; }
+    .auth-inputs input { padding: 8px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 12px; width: 300px; outline: none; }
+    .auth-inputs input:focus { border-color: #58a6ff; }
+    .auth-btn { background: #238636; color: white; border: none; padding: 10px 24px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .auth-btn:hover { background: #2ea043; }
+    .auth-btn.disconnect { background: #484f58; }
+    .search-box { display: flex; gap: 8px; margin-bottom: 16px; }
+    .search-box input { flex: 1; padding: 10px 16px; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 14px; outline: none; }
+    .search-box input:focus { border-color: #58a6ff; }
+    .search-box button { padding: 10px 20px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .repo-list { display: flex; flex-direction: column; gap: 8px; }
+    .repo { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; }
+    .repo:hover { border-color: #58a6ff; }
+    .repo-name { font-size: 14px; font-weight: 600; color: #58a6ff; margin-bottom: 4px; }
+    .repo-desc { font-size: 12px; color: #8b949e; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .repo-meta { display: flex; gap: 12px; font-size: 11px; color: #8b949e; }
+    .repo-meta span { display: flex; align-items: center; gap: 3px; }
+    .empty { text-align: center; color: #8b949e; padding: 32px; font-size: 14px; }
+    .status-msg { font-size: 13px; color: #238636; margin-top: 8px; text-align: center; }
+    .status-msg.error { color: #f85149; }
+    .gist-result { background: #161b22; border: 1px solid #238636; border-radius: 8px; padding: 16px; margin-top: 12px; text-align: center; }
+    .gist-result a { color: #58a6ff; text-decoration: none; }
+    .gist-result a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <svg viewBox="0 0 16 16"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+    <h2>GitHub Gist Creator</h2>
+  </div>
+
+  <div class="auth-banner" id="authBanner">
+    <p id="authMsg" style="color: #8b949e; font-size: 13px; margin-bottom: 8px;">Connect your GitHub account to create Gists</p>
+    <div class="auth-inputs" id="authInputs">
+      <input type="text" id="clientIdInput" placeholder="GitHub OAuth App Client ID">
+      <input type="text" id="clientSecretInput" placeholder="GitHub OAuth App Client Secret">
+    </div>
+    <button class="auth-btn" id="authBtn" onclick="handleAuth()">Connect GitHub</button>
+  </div>
+
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Search GitHub repositories..." onkeydown="if(event.key==='Enter')doSearch()">
+    <button onclick="doSearch()">Search</button>
+  </div>
+
+  <div id="content">
+    <div class="empty">Search repos or ask the chatbot to find code for you.</div>
+  </div>
+
+  <div id="gistResult"></div>
+  <div id="statusMsg" class="status-msg"></div>
+
+  <script>
+    const SCOPES = 'gist public_repo';
+    let seq = 0;
+    let githubClientId = '';
+    let githubClientSecret = '';
+    let accessToken = null;
+    let userProfile = null;
+    let searchResults = [];
+    const fetchPending = new Map();
+
+    // ── ChatBridge Protocol ──
+    function send(payload) {
+      window.parent.postMessage({
+        protocol: 'chatbridge',
+        correlationId: payload.correlationId || crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        seq: seq++,
+        ...payload
+      }, '*');
+    }
+
+    function bridgeFetch(url, options) {
+      const correlationId = crypto.randomUUID();
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => { fetchPending.delete(correlationId); reject(new Error('Fetch proxy timeout')); }, 15000);
+        fetchPending.set(correlationId, {
+          resolve: (val) => { clearTimeout(timeout); resolve(val); },
+          reject: (err) => { clearTimeout(timeout); reject(err); }
+        });
+        send({ type: 'FETCH_REQUEST', pluginId: 'github', correlationId, url, options });
+      });
+    }
+
+    window.addEventListener('message', async (event) => {
+      const data = event.data;
+      if (!data) return;
+
+      if (data.protocol === 'chatbridge' && data.type === 'FETCH_RESPONSE') {
+        const pending = fetchPending.get(data.correlationId);
+        if (pending) {
+          fetchPending.delete(data.correlationId);
+          if (data.errorMessage) pending.reject(new Error(data.errorMessage));
+          else pending.resolve({ ok: data.ok, status: data.status, data: data.data });
+        }
+        return;
+      }
+
+      // Handle OAuth callback from popup
+      if (data.type === 'github-auth-code' && data.code) {
+        await exchangeCodeForToken(data.code);
+        return;
+      }
+
+      if (data.protocol !== 'chatbridge') return;
+
+      if (data.type === 'TOOL_INVOKE') {
+        try {
+          let result;
+          switch (data.toolName) {
+            case 'search_repos': result = await searchRepos(data.parameters.query); break;
+            case 'create_gist': result = await createGist(data.parameters.description, data.parameters.filename, data.parameters.content); break;
+            case 'get_auth_status': result = { authenticated: !!accessToken, user: userProfile?.login || null }; break;
+            default: throw new Error(`Unknown tool: ${data.toolName}`);
+          }
+          send({ type: 'TOOL_RESULT', correlationId: data.correlationId, status: 'success', data: result });
+        } catch (err) {
+          send({ type: 'TOOL_RESULT', correlationId: data.correlationId, status: 'error', data: null, errorMessage: err.message });
+        }
+      }
+
+      if (data.type === 'RESTORE_STATE' && data.lastStateSummary) {
+        if (data.lastStateSummary.searchResults) {
+          searchResults = data.lastStateSummary.searchResults;
+          renderRepos();
+        }
+      }
+    });
+
+    // ── OAuth Flow ──
+    function handleAuth() {
+      if (accessToken) {
+        accessToken = null; userProfile = null; githubClientId = ''; githubClientSecret = '';
+        document.getElementById('authInputs').style.display = 'flex';
+        updateAuthUI();
+        return;
+      }
+
+      githubClientId = document.getElementById('clientIdInput').value.trim();
+      githubClientSecret = document.getElementById('clientSecretInput').value.trim();
+
+      if (!githubClientId || !githubClientSecret) {
+        showStatus('Please enter both Client ID and Client Secret', true);
+        return;
+      }
+
+      const state = crypto.randomUUID();
+      const redirectUri = window.location.origin.replace('//localhost:', '//127.0.0.1:') + '/plugins/github/callback.html';
+      const params = new URLSearchParams({
+        client_id: githubClientId,
+        redirect_uri: redirectUri,
+        scope: SCOPES,
+        state,
+      });
+      window.open(`https://github.com/login/oauth/authorize?${params}`, 'github-auth', 'width=600,height=700');
+    }
+
+    async function exchangeCodeForToken(code) {
+      try {
+        showStatus('Exchanging auth code...');
+        const redirectUri = window.location.origin.replace('//localhost:', '//127.0.0.1:') + '/plugins/github/callback.html';
+        // Use Supabase Edge Function to proxy the token exchange (GitHub blocks browser CORS)
+        const res = await bridgeFetch('https://scfugfkzbzbkddbasjhx.supabase.co/functions/v1/github-token-exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: githubClientId,
+            client_secret: githubClientSecret,
+            code,
+            redirect_uri: redirectUri,
+          }),
+        });
+
+        if (!res.ok || res.data?.error) {
+          showStatus('Token exchange failed: ' + (res.data?.error_description || res.data?.error || 'unknown'), true);
+          return;
+        }
+
+        accessToken = res.data.access_token;
+        document.getElementById('authInputs').style.display = 'none';
+        await loadProfile();
+        updateAuthUI();
+        showStatus(`Connected as ${userProfile?.login || 'GitHub User'}`);
+        send({
+          type: 'STATE_UPDATE', pluginId: 'github',
+          stateSummary: { authenticated: true, user: userProfile?.login },
+          description: `GitHub connected as ${userProfile?.login || 'user'}`
+        });
+      } catch (err) {
+        showStatus('Token exchange error: ' + err.message, true);
+      }
+    }
+
+    async function loadProfile() {
+      if (!accessToken) return;
+      try {
+        const res = await bridgeFetch('https://api.github.com/user', {
+          headers: { Authorization: `Bearer ${accessToken}`, 'Accept': 'application/json' }
+        });
+        if (res.ok) userProfile = res.data;
+      } catch (e) { console.warn('Failed to load profile:', e); }
+    }
+
+    function updateAuthUI() {
+      const banner = document.getElementById('authBanner');
+      const btn = document.getElementById('authBtn');
+      const msg = document.getElementById('authMsg');
+      if (accessToken) {
+        banner.classList.add('connected');
+        msg.textContent = `Connected as ${userProfile?.login || 'GitHub User'}`;
+        btn.textContent = 'Disconnect';
+        btn.classList.add('disconnect');
+      } else {
+        banner.classList.remove('connected');
+        msg.textContent = 'Connect your GitHub account to create Gists';
+        btn.textContent = 'Connect GitHub';
+        btn.classList.remove('disconnect');
+      }
+    }
+
+    // ── GitHub API ──
+    async function searchRepos(query) {
+      // GitHub search API is public — no auth needed
+      const res = await bridgeFetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=stars&per_page=8`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!res.ok) throw new Error('GitHub search failed: ' + (res.data?.message || res.status));
+
+      searchResults = res.data.items.map(r => ({
+        id: r.id,
+        name: r.full_name,
+        description: r.description || '',
+        stars: r.stargazers_count,
+        language: r.language || 'Unknown',
+        url: r.html_url,
+        updated: new Date(r.updated_at).toLocaleDateString(),
+      }));
+
+      renderRepos();
+      send({
+        type: 'STATE_UPDATE', pluginId: 'github',
+        stateSummary: { searchResults, query },
+        description: `Found ${searchResults.length} repos for "${query}"`
+      });
+      return { query, repos: searchResults, count: searchResults.length };
+    }
+
+    async function createGist(description, filename, content) {
+      if (!accessToken) {
+        throw new Error('AUTH_REQUIRED: Please connect your GitHub account first. Enter your OAuth App credentials and click "Connect GitHub" in the side panel.');
+      }
+
+      const res = await bridgeFetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          description,
+          public: true,
+          files: { [filename]: { content } },
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to create gist: ' + (res.data?.message || res.status));
+
+      const gist = res.data;
+      const result = {
+        gistUrl: gist.html_url,
+        description,
+        filename,
+        message: `Gist created: ${gist.html_url}`,
+      };
+
+      document.getElementById('gistResult').innerHTML = `
+        <div class="gist-result">
+          <p style="margin-bottom:8px;">Gist created successfully!</p>
+          <a href="${gist.html_url}" target="_blank">${gist.html_url}</a>
+        </div>
+      `;
+
+      showStatus('Gist created!');
+      send({ type: 'APP_COMPLETE', pluginId: 'github', resultSummary: result.message, data: result });
+      return result;
+    }
+
+    // ── UI Rendering ──
+    function renderRepos() {
+      const content = document.getElementById('content');
+      if (searchResults.length === 0) {
+        content.innerHTML = '<div class="empty">No repositories found.</div>';
+        return;
+      }
+      content.innerHTML = `<div class="repo-list">${searchResults.map(r => `
+        <div class="repo">
+          <div class="repo-name">${r.name}</div>
+          <div class="repo-desc">${r.description}</div>
+          <div class="repo-meta">
+            <span>&#11088; ${r.stars.toLocaleString()}</span>
+            <span>${r.language}</span>
+            <span>Updated ${r.updated}</span>
+          </div>
+        </div>
+      `).join('')}</div>`;
+    }
+
+    function doSearch() {
+      const query = document.getElementById('searchInput').value.trim();
+      if (query) searchRepos(query);
+    }
+
+    function showStatus(msg, isError = false) {
+      const el = document.getElementById('statusMsg');
+      el.textContent = msg;
+      el.className = `status-msg ${isError ? 'error' : ''}`;
+      setTimeout(() => { el.textContent = ''; }, 5000);
+    }
+
+    // ── Init ──
+    send({ type: 'APP_READY', pluginId: 'github' });
+  </script>
+</body>
+</html>
