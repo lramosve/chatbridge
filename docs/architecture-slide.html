@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChatBridge Architecture</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 32px 48px; }
+
+    h1 { font-size: 36px; font-weight: 700; margin-bottom: 6px; }
+    h1 span { color: #58a6ff; }
+    .subtitle { color: #8b949e; font-size: 16px; margin-bottom: 32px; }
+
+    .decisions { display: flex; gap: 20px; margin-bottom: 28px; width: 100%; max-width: 1200px; }
+    .decision { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; }
+    .decision:hover { border-color: #58a6ff; }
+    .decision .num { display: inline-block; background: #58a6ff; color: #0d1117; font-weight: 700; font-size: 14px; width: 28px; height: 28px; border-radius: 50%; text-align: center; line-height: 28px; margin-bottom: 10px; }
+    .decision h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; color: #e6edf3; }
+    .decision p { font-size: 13px; color: #8b949e; line-height: 1.5; }
+    .decision .highlight { color: #58a6ff; font-weight: 600; }
+
+    .diagram { width: 100%; max-width: 1200px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; margin-bottom: 28px; }
+    .diagram h2 { font-size: 15px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+
+    .flow { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+    .flow-item { background: #0d1117; border: 2px solid #30363d; border-radius: 8px; padding: 10px 14px; text-align: center; min-width: 120px; }
+    .flow-item.user { border-color: #58a6ff; }
+    .flow-item.chat { border-color: #3fb950; }
+    .flow-item.plugin { border-color: #d29922; }
+    .flow-item.app { border-color: #f85149; }
+    .flow-item .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .flow-item.user .label { color: #58a6ff; }
+    .flow-item.chat .label { color: #3fb950; }
+    .flow-item.plugin .label { color: #d29922; }
+    .flow-item.app .label { color: #f85149; }
+    .flow-item .name { font-size: 13px; font-weight: 600; }
+    .arrow { color: #484f58; font-size: 20px; }
+
+    .protocol { width: 100%; max-width: 1200px; display: flex; gap: 20px; margin-bottom: 28px; }
+    .protocol-col { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; }
+    .protocol-col h3 { font-size: 14px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .msg { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #21262d; }
+    .msg:last-child { border-bottom: none; }
+    .msg .dir { font-size: 16px; }
+    .msg .mname { font-size: 13px; font-weight: 600; color: #e6edf3; }
+    .msg .mdesc { font-size: 12px; color: #8b949e; margin-left: auto; }
+
+    .apps { width: 100%; max-width: 1200px; display: flex; gap: 20px; }
+    .app-card { flex: 1; background: #161b22; border-radius: 12px; padding: 18px; text-align: center; }
+    .app-card.chess { border: 2px solid #f85149; }
+    .app-card.weather { border: 2px solid #58a6ff; }
+    .app-card.github { border: 2px solid #3fb950; }
+    .app-card .icon { font-size: 28px; margin-bottom: 6px; }
+    .app-card h4 { font-size: 15px; margin-bottom: 4px; }
+    .app-card .type { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .app-card.chess .type { color: #f85149; }
+    .app-card.weather .type { color: #58a6ff; }
+    .app-card.github .type { color: #3fb950; }
+    .app-card .detail { font-size: 12px; color: #8b949e; line-height: 1.4; }
+  </style>
+</head>
+<body>
+
+  <h1>Chat<span>Bridge</span> Architecture</h1>
+  <p class="subtitle">Three design decisions that define the platform</p>
+
+  <div class="decisions">
+    <div class="decision">
+      <div class="num">1</div>
+      <h3>Iframe Sandboxing</h3>
+      <p>Apps run in <span class="highlight">&lt;iframe sandbox&gt;</span> without <code>allow-same-origin</code>. The browser enforces isolation — apps cannot access the parent DOM, cookies, or storage. External API calls go through a <span class="highlight">FETCH_REQUEST</span> proxy.</p>
+    </div>
+    <div class="decision">
+      <div class="num">2</div>
+      <h3>Typed PostMessage Protocol</h3>
+      <p><span class="highlight">9 message types</span> define the contract. TOOL_INVOKE and TOOL_RESULT for function calls. STATE_UPDATE for LLM context. APP_COMPLETE for signaling. FETCH_REQUEST/RESPONSE for API proxy. Apps that implement this protocol work automatically.</p>
+    </div>
+    <div class="decision">
+      <div class="num">3</div>
+      <h3>Plugin Tools as AI SDK Function Calls</h3>
+      <p>Each plugin publishes a <span class="highlight">manifest</span> declaring tools as JSON Schema. These become <span class="highlight">Vercel AI SDK</span> tool() definitions. The LLM sees them alongside built-in tools and routes via function calling — no custom routing needed.</p>
+    </div>
+  </div>
+
+  <div class="diagram">
+    <h2>Data Flow</h2>
+    <div class="flow">
+      <div class="flow-item user"><div class="label">User</div><div class="name">Chat Message</div></div>
+      <div class="arrow">→</div>
+      <div class="flow-item chat"><div class="label">AI Engine</div><div class="name">Vercel AI SDK</div></div>
+      <div class="arrow">→</div>
+      <div class="flow-item plugin"><div class="label">Plugin Controller</div><div class="name">postMessage Bridge</div></div>
+      <div class="arrow">→</div>
+      <div class="flow-item app"><div class="label">Sandboxed Iframe</div><div class="name">Third-Party App</div></div>
+      <div class="arrow">→</div>
+      <div class="flow-item plugin"><div class="label">TOOL_RESULT</div><div class="name">Back to LLM</div></div>
+      <div class="arrow">→</div>
+      <div class="flow-item user"><div class="label">Response</div><div class="name">Chat + Side Panel</div></div>
+    </div>
+  </div>
+
+  <div class="protocol">
+    <div class="protocol-col">
+      <h3>Platform → App</h3>
+      <div class="msg"><span class="dir">📤</span><span class="mname">TOOL_INVOKE</span><span class="mdesc">Call tool with params</span></div>
+      <div class="msg"><span class="dir">📤</span><span class="mname">RESTORE_STATE</span><span class="mdesc">Resume after reload</span></div>
+      <div class="msg"><span class="dir">📤</span><span class="mname">FETCH_RESPONSE</span><span class="mdesc">Proxied API result</span></div>
+    </div>
+    <div class="protocol-col">
+      <h3>App → Platform</h3>
+      <div class="msg"><span class="dir">📥</span><span class="mname">APP_READY</span><span class="mdesc">Iframe loaded</span></div>
+      <div class="msg"><span class="dir">📥</span><span class="mname">TOOL_RESULT</span><span class="mdesc">Tool response</span></div>
+      <div class="msg"><span class="dir">📥</span><span class="mname">STATE_UPDATE</span><span class="mdesc">State for LLM context</span></div>
+      <div class="msg"><span class="dir">📥</span><span class="mname">APP_COMPLETE</span><span class="mdesc">Interaction done</span></div>
+      <div class="msg"><span class="dir">📥</span><span class="mname">APP_ERROR</span><span class="mdesc">Error report</span></div>
+      <div class="msg"><span class="dir">📥</span><span class="mname">FETCH_REQUEST</span><span class="mdesc">Proxy API call</span></div>
+    </div>
+  </div>
+
+  <div class="apps">
+    <div class="app-card chess">
+      <div class="icon">♟️</div>
+      <h4>Chess</h4>
+      <div class="type">Internal App</div>
+      <div class="detail">No auth, no external API<br>Complex state (FEN)<br>Bidirectional communication</div>
+    </div>
+    <div class="app-card weather">
+      <div class="icon">🌤️</div>
+      <h4>Weather</h4>
+      <div class="type">External (Public)</div>
+      <div class="detail">No user auth<br>Open-Meteo API via fetch proxy<br>Simple request/response</div>
+    </div>
+    <div class="app-card github">
+      <div class="icon">🐙</div>
+      <h4>GitHub Gists</h4>
+      <div class="type">External (OAuth)</div>
+      <div class="detail">OAuth popup + PKCE<br>Token exchange via Edge Function<br>User-specific data</div>
+    </div>
+  </div>
+
+</body>
+</html>
