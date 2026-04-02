@@ -157,6 +157,8 @@
         accessToken = null; userProfile = null; githubClientId = ''; githubClientSecret = '';
         document.getElementById('authInputs').style.display = 'flex';
         updateAuthUI();
+        // Clear persisted auth state
+        send({ type: 'STATE_UPDATE', pluginId: 'github', stateSummary: { authenticated: false }, description: 'GitHub disconnected' });
         return;
       }
 
