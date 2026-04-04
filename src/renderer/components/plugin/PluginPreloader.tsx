@@ -68,6 +68,11 @@ export function PluginPreloader() {
         }
       }
     }
+
+    // Wire up APP_COMPLETE to show completion in the side panel
+    controller.onAppComplete = (pluginId, resultSummary, _data) => {
+      usePluginPanel.getState().setCompletion(resultSummary)
+    }
   }, [controller])
 
   // Create the persistent container once

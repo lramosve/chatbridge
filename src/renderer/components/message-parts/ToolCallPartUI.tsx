@@ -224,12 +224,24 @@ export const ToolCallPartUI: FC<{ part: MessageToolCallPart }> = ({ part }) => {
   return <GeneralToolCallUI part={part} />
 }
 
-/** Plugin tool calls show the standard header + a button to open the side panel */
+const PLUGIN_ICONS: Record<string, string> = {
+  chess: '♟️', weather: '🌤️', github: '🐙', flashcards: '📚', dictionary: '📖',
+}
+
+/** Plugin tool calls show a branded header with "View in panel" link */
 const PluginToolCallUI: FC<{ pluginId: string; part: MessageToolCallPart }> = ({ pluginId, part }) => {
   const open = usePluginPanel((s) => s.open)
+  const isActive = usePluginPanel((s) => s.activePluginId === pluginId)
+  const icon = PLUGIN_ICONS[pluginId] || '🧩'
+  const toolName = part.toolName.split('__')[1] || part.toolName
+
   return (
-    <div onClick={() => open(pluginId)} style={{ cursor: 'pointer' }}>
-      <GeneralToolCallUI part={part} />
+    <div
+      onClick={() => open(pluginId)}
+      style={{ cursor: 'pointer' }}
+      title="Click to view in side panel"
+    >
+      <GeneralToolCallUI part={{ ...part, toolName: `${icon} ${toolName}` } as MessageToolCallPart} />
     </div>
   )
 }

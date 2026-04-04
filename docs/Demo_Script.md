@@ -1,97 +1,98 @@
 # ChatBridge Demo Script (~4:30)
 
 ## Intro (0:00 - 0:20)
-**Say:** "This is ChatBridge — an AI chat platform where third-party apps live inside the conversation. I'll show three plugins covering three integration patterns: Chess as an internal app, Weather as a public API, and GitHub Gists with OAuth authentication."
+**Say:** "ChatBridge is an AI chat platform designed for K-12 education where third-party learning apps live inside the conversation. The key challenge: teachers need apps to be sandboxed for student safety, the AI must stay aware of what students are doing, and interactions need clear start and end points. I'll show how the plugin lifecycle handles this with five apps — but we'll focus on three that demonstrate the core patterns."
 
 **Show:** The main chat screen at chatbridge-delta.vercel.app
 
 ---
 
-## Scene 1: Weather — Public API (0:20 - 1:10)
-**Covers:** Scenarios #1 (tool discovery), #2 (UI renders), #4 (context retention)
+## Scene 1: Flashcards — Educational Value + Full Lifecycle (0:20 - 1:30)
+**Covers:** Scenarios #1 (tool discovery), #2 (UI renders), #3 (completion signaling), #4 (context retention)
 
 1. Start a **New Chat**
-2. Type: **"What's the weather in Tokyo?"**
-3. **Show:** The LLM calls `weather__get_weather`, the side panel opens with the weather card
-4. **Say:** "The LLM discovered the weather tool automatically via function calling. The app runs in a sandboxed iframe, and API calls are proxied through the platform since the iframe can't make cross-origin requests."
-5. Type: **"How about New York?"**
-6. **Show:** The side panel updates with New York weather
-7. **Say:** "The LLM retains context — it knows we're talking about weather and calls the same tool again."
+2. Type: **"Help me study the first 5 elements of the periodic table"**
+3. **Show:** LLM generates flashcards and calls `flashcards__create_deck`. Side panel opens with the flashcard UI.
+4. **Say:** "The LLM discovered the flashcard tool from the manifest and generated a deck. The app runs in a sandboxed iframe in the side panel — like ChatGPT's canvas, but for any third-party app."
+5. **Flip a card, mark it correct. Flip another, mark it wrong.**
+6. **Say:** "Each answer sends a STATE_UPDATE with my progress. The LLM knows exactly how I'm doing."
+7. Type: **"How am I doing so far?"**
+8. **Show:** LLM calls `flashcards__get_study_progress` and reports accuracy
+9. **Say:** "The AI can check my progress because STATE_UPDATE keeps it informed. In a classroom, this means the teacher's dashboard knows which students are struggling."
+10. **Complete all cards in the deck.**
+11. **Show:** Side panel shows the score and the **"Complete" badge** with summary in the banner.
+12. **Say:** "Notice the completion signal. The app sent APP_COMPLETE with 'Session complete: 4/5 correct on Periodic Table Elements.' This is completion signaling — the platform doesn't guess when a student is done. The app tells us. A teacher would know this student actually finished their practice."
 
 ---
 
-## Scene 2: Chess — Stateful Internal App (1:10 - 2:30)
-**Covers:** Scenarios #3 (completion signaling), #5 (switch between apps)
+## Scene 2: Dictionary — App Switching + Public API (1:30 - 2:10)
+**Covers:** Scenario #5 (switch between apps)
 
-1. In the **same chat**, type: **"Let's play chess"**
-2. **Show:** Side panel switches from Weather to Chess, board appears
-3. **Say:** "We just switched apps in the same conversation — that's scenario five. Chess is an internal app with no external API. The board renders via the postMessage protocol."
-4. Make a move by clicking on the board (e.g., e2 to e4)
-5. Type: **"What should I do next?"**
-6. **Show:** The LLM analyzes the board state (injected via STATE_UPDATE with the FEN string)
-7. **Say:** "The app sent a STATE_UPDATE with the board position as a FEN string. The LLM can reason about it without controlling the app directly."
-8. Type: **"I resign"**
-9. **Show:** LLM calls `chess__resign_game`, APP_COMPLETE fires
-10. **Say:** "The app explicitly signaled completion. The conversation resumes with full context of what happened."
+1. In the **same chat**, type: **"What does 'photosynthesis' mean?"**
+2. **Show:** Side panel switches from Flashcards to Dictionary, shows definition with pronunciation
+3. **Say:** "We just switched apps in the same conversation. The dictionary uses a public API — but the iframe can't make cross-origin requests, so the platform proxies it through FETCH_REQUEST. The student sees definitions, pronunciation, and builds a vocabulary list."
+4. Type: **"Add that to my vocabulary"** (or note the vocab list building automatically)
+5. **Say:** "Every word looked up is added to a personal vocabulary list — state that persists across the session."
 
 ---
 
-## Scene 3: GitHub — OAuth Flow (2:30 - 3:30)
+## Scene 3: Chess — Stateful Interaction + AI as Opponent (2:10 - 3:10)
+**Covers:** Scenario #4 (context retention), #5 (multiple apps)
+
+1. Type: **"Let's play chess"**
+2. **Show:** Side panel switches to Chess, board appears
+3. **Make a move on the board** (e.g., d4)
+4. **Show:** Auto-submitted message "I played d4. Your turn." — LLM responds with its move
+5. **Say:** "The board sends STATE_UPDATE with the FEN string after each move. The platform auto-submits a message to trigger the AI's response — no manual typing needed. The LLM plays as the opponent."
+6. Type: **"I resign"**
+7. **Show:** APP_COMPLETE fires, "Complete" badge appears in the side panel
+8. **Say:** "Again, explicit completion signaling. The game ended, the app told us, the platform recorded it."
+
+---
+
+## Scene 4: Routing & Refusal (3:10 - 3:30)
 **Covers:** Scenario #6 (routing accuracy), #7 (refuse unrelated)
-
-1. Type: **"Create a gist with a hello world Python script"**
-2. **Show:** LLM calls `github__create_gist`, gets AUTH_REQUIRED error, tells user to connect
-3. **Say:** "The LLM correctly routed to the GitHub plugin and received an auth-required response. Let me connect."
-4. Enter your **Client ID** and **Client Secret** in the side panel, click **Connect GitHub**
-5. **Show:** OAuth popup opens, authorize, popup closes, "Connected as [username]"
-6. **Say:** "OAuth uses a popup flow — the sandboxed iframe can't handle redirects, so the popup escapes the sandbox, completes auth, and sends the code back. Token exchange goes through a Supabase Edge Function since GitHub blocks browser CORS."
-7. Type: **"Now create that gist"**
-8. **Show:** Gist created, URL displayed
-
----
-
-## Scene 4: Routing & Refusal (3:30 - 3:50)
-**Covers:** Scenario #6 (ambiguous), #7 (refuse)
 
 1. Type: **"What's 2+2?"**
 2. **Show:** LLM answers without calling any plugin
-3. **Say:** "The LLM correctly refused to invoke any app for an unrelated query."
+3. **Say:** "The LLM correctly refused to invoke any app for an unrelated query. It only routes to plugins when the user's intent matches a tool description."
 
 ---
 
-## Scene 5: Architecture (3:50 - 4:30)
-**Switch to:** `docs/architecture-slide.html` in the browser (or the deployed version)
+## Scene 5: Architecture (3:30 - 4:30)
+**Switch to:** `docs/architecture-slide.html` in the browser
 
-**Say while showing the architecture slide:**
+**Say:**
 
-"Three design decisions define this architecture:
+"Let me walk through the architecture that makes this work.
 
-**One** — Iframe sandboxing. Apps run without allow-same-origin. The browser enforces isolation. External API calls are proxied through the platform via a FETCH_REQUEST message.
+**One** — Iframe sandboxing. Every app runs without allow-same-origin. The browser enforces isolation. Students can't have their data accessed by a rogue app. External API calls go through a fetch proxy — the app asks the platform, the platform makes the request.
 
-**Two** — A typed postMessage protocol with nine message types. TOOL_INVOKE, TOOL_RESULT, STATE_UPDATE, APP_COMPLETE, and FETCH_REQUEST/RESPONSE are the key ones. Apps that implement this protocol work automatically.
+**Two** — A typed postMessage protocol with nine message types. TOOL_INVOKE sends commands. STATE_UPDATE keeps the AI informed. APP_COMPLETE closes the loop. This is the contract — any app that implements it works on the platform.
 
-**Three** — Plugin tools as AI SDK function calls. Each plugin publishes a manifest declaring its tools as JSON Schema. These get converted to Vercel AI SDK tool definitions. The LLM sees them alongside built-in tools and routes naturally via function calling.
+**Three** — Plugin tools as AI SDK function calls. Each app publishes a manifest declaring tools as JSON Schema. The LLM sees them alongside built-in tools and routes naturally. No custom routing logic — function calling handles it.
 
-Three apps, three patterns — internal, public API, and OAuth — all running through the same protocol."
+Five apps, three patterns — internal, public API, and OAuth — all running through the same protocol. And every interaction has a clear lifecycle: registration, invocation, state updates, and completion. That's what makes this work for K-12 — teachers get visibility, students get interactive learning, and the platform keeps everyone safe."
 
 ---
 
 ## Recording Tips
-- Use a browser at **1280x720** for clean resolution
-- Clear old chats from the sidebar before recording
-- Pre-enter the GitHub Client ID/Secret so you just paste them quickly
-- If a tool call is slow, narrate while waiting: "The platform is proxying this through the fetch bridge..."
-
----
+- Use browser at **1280x720** for clean resolution
+- Clear old chats and localStorage before recording
+- Pre-clear `localStorage.removeItem('chatbridge-plugins')` and refresh
+- Have a good prompt ready for flashcards (periodic table works well)
+- When APP_COMPLETE fires, pause on the "Complete" badge — this is the money shot
+- Consider zooming into the side panel header when showing the Active/Complete badges
 
 ## Testing Scenario Coverage
 
 | # | Scenario | Where in Demo |
 |---|----------|--------------|
-| 1 | Tool discovery + invocation | Scene 1: "What's the weather in Tokyo?" |
-| 2 | App UI renders in chat | Scene 1: Weather card in side panel |
-| 3 | Interaction then completion signaling | Scene 2: Chess resign → APP_COMPLETE |
-| 4 | Context retention after completion | Scene 1: Follow-up "How about New York?" |
-| 5 | Switch between multiple apps | Scene 2: Weather → Chess in same chat |
-| 6 | Routing accuracy | Scene 3: Routes to GitHub for gist creation |
-| 7 | Refuse unrelated queries | Scene 4: "What's 2+2?" → no plugin called |
+| 1 | Tool discovery + invocation | Scene 1: Flashcard deck creation |
+| 2 | App UI renders in chat | Scene 1: Flashcard side panel |
+| 3 | Completion signaling | Scene 1: Deck finished → Complete badge |
+| 4 | Context retention | Scene 1: "How am I doing?" + Scene 3: Chess FEN |
+| 5 | Switch between multiple apps | Scene 2: Flashcards → Dictionary → Chess |
+| 6 | Routing accuracy | Scene 4: "What's 2+2?" |
+| 7 | Refuse unrelated queries | Scene 4: No plugin invoked |
+| K-12 | Educational value | Scene 1: Progress tracking, Scene 2: Vocab building, Scene 3: Strategic thinking, Completion signaling throughout |
