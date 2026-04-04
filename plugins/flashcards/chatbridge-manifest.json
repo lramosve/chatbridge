@@ -1,0 +1,41 @@
+{
+  "id": "flashcards",
+  "name": "Flashcard Quiz",
+  "description": "Create and study flashcard decks on any subject. Use this when a student wants to study, review, memorize, or practice any topic. The AI generates flashcards, tracks correct/incorrect answers, and adapts difficulty.",
+  "version": "1.0.0",
+  "author": "ChatBridge",
+  "entryUrl": "/plugins/flashcards/index.html",
+  "tools": [
+    {
+      "name": "create_deck",
+      "description": "Create a new flashcard deck on a topic. Use when the student wants to study or review a subject.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "The subject or topic (e.g., 'Spanish vocabulary', 'US State capitals', 'photosynthesis')"
+          },
+          "cards": {
+            "type": "string",
+            "description": "JSON array of cards, each with 'front' and 'back' fields. E.g., [{\"front\":\"Hola\",\"back\":\"Hello\"},{\"front\":\"Gracias\",\"back\":\"Thank you\"}]"
+          }
+        },
+        "required": ["topic", "cards"]
+      }
+    },
+    {
+      "name": "get_study_progress",
+      "description": "Get the student's current study progress — how many cards reviewed, correct/incorrect, and which cards need more practice.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  ],
+  "auth": {
+    "type": "none"
+  },
+  "toolTimeout": 5000
+}

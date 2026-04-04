@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dictionary - ChatBridge Plugin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 16px; background: #fffbeb; color: #1a1a2e; }
+    .header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .header h2 { font-size: 18px; color: #b45309; }
+    .search-box { display: flex; gap: 8px; margin-bottom: 16px; }
+    .search-box input { flex: 1; padding: 10px 16px; background: white; border: 2px solid #fde68a; border-radius: 10px; font-size: 14px; outline: none; }
+    .search-box input:focus { border-color: #f59e0b; }
+    .search-box button { padding: 10px 20px; background: #f59e0b; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .search-box button:hover { background: #d97706; }
+
+    .word-card { background: white; border: 2px solid #fde68a; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+    .word-title { font-size: 28px; font-weight: 700; color: #92400e; margin-bottom: 2px; }
+    .phonetic { font-size: 15px; color: #b45309; margin-bottom: 4px; font-style: italic; }
+    .audio-btn { background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: #92400e; margin-bottom: 12px; display: inline-block; }
+    .audio-btn:hover { background: #fde68a; }
+
+    .meaning { margin-bottom: 14px; }
+    .pos { display: inline-block; background: #fef3c7; color: #92400e; padding: 2px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+    .definition { font-size: 14px; line-height: 1.5; margin-bottom: 4px; padding-left: 12px; border-left: 3px solid #fde68a; }
+    .example { font-size: 13px; color: #78716c; font-style: italic; margin-top: 4px; padding-left: 12px; }
+    .synonyms { font-size: 12px; color: #a8a29e; margin-top: 6px; }
+    .synonyms span { background: #f5f5f4; padding: 1px 6px; border-radius: 3px; margin-right: 4px; }
+
+    .vocab-list { background: white; border: 2px solid #fde68a; border-radius: 12px; padding: 16px; }
+    .vocab-list h3 { font-size: 14px; color: #b45309; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .vocab-word { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #fef3c7; font-size: 13px; cursor: pointer; }
+    .vocab-word:last-child { border-bottom: none; }
+    .vocab-word:hover { color: #b45309; }
+    .vocab-word .vw-word { font-weight: 600; }
+    .vocab-word .vw-pos { color: #a8a29e; font-size: 11px; }
+    .vocab-count { font-size: 12px; color: #a8a29e; text-align: center; margin-top: 8px; }
+
+    .empty { text-align: center; color: #d97706; padding: 40px 16px; font-size: 14px; line-height: 1.6; }
+    .error-msg { text-align: center; color: #dc2626; padding: 20px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span style="font-size:24px;">📖</span>
+    <h2>Dictionary & Vocabulary Builder</h2>
+  </div>
+
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Look up a word..." onkeydown="if(event.key==='Enter')doSearch()">
+    <button onclick="doSearch()">Look Up</button>
+  </div>
+
+  <div id="wordContent"></div>
+  <div id="vocabList"></div>
+
+  <script>
+    const API_URL = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
+    let seq = 0;
+    let vocabulary = []; // {word, phonetic, partOfSpeech, definition}
+    let currentWordData = null;
+    const fetchPending = new Map();
+
+    function send(payload) {
+      window.parent.postMessage({
+        protocol: 'chatbridge',
+        correlationId: payload.correlationId || crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        seq: seq++,
+        ...payload
+      }, '*');
+    }
+
+    function bridgeFetch(url, options) {
+      const correlationId = crypto.randomUUID();
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => { fetchPending.delete(correlationId); reject(new Error('Fetch proxy timeout')); }, 15000);
+        fetchPending.set(correlationId, {
+          resolve: (val) => { clearTimeout(timeout); resolve(val); },
+          reject: (err) => { clearTimeout(timeout); reject(err); }
+        });
+        send({ type: 'FETCH_REQUEST', pluginId: 'dictionary', correlationId, url, options });
+      });
+    }
+
+    window.addEventListener('message', async (event) => {
+      const data = event.data;
+      if (!data) return;
+
+      if (data.protocol === 'chatbridge' && data.type === 'FETCH_RESPONSE') {
+        const pending = fetchPending.get(data.correlationId);
+        if (pending) {
+          fetchPending.delete(data.correlationId);
+          if (data.errorMessage) pending.reject(new Error(data.errorMessage));
+          else pending.resolve({ ok: data.ok, status: data.status, data: data.data });
+        }
+        return;
+      }
+
+      if (data.protocol !== 'chatbridge') return;
+
+      if (data.type === 'TOOL_INVOKE') {
+        try {
+          let result;
+          switch (data.toolName) {
+            case 'lookup_word': result = await lookupWord(data.parameters.word); break;
+            case 'get_vocabulary_list': result = getVocabList(); break;
+            default: throw new Error(`Unknown tool: ${data.toolName}`);
+          }
+          send({ type: 'TOOL_RESULT', correlationId: data.correlationId, status: 'success', data: result });
+        } catch (err) {
+          send({ type: 'TOOL_RESULT', correlationId: data.correlationId, status: 'error', data: null, errorMessage: err.message });
+        }
+      }
+
+      if (data.type === 'RESTORE_STATE' && data.lastStateSummary) {
+        const s = data.lastStateSummary;
+        if (s.vocabulary) { vocabulary = s.vocabulary; renderVocabList(); }
+        if (s.currentWordData) { currentWordData = s.currentWordData; renderWord(currentWordData); }
+      }
+    });
+
+    async function lookupWord(word) {
+      const res = await bridgeFetch(`${API_URL}${encodeURIComponent(word.toLowerCase().trim())}`);
+      if (!res.ok) {
+        if (res.status === 404) throw new Error(`Word "${word}" not found. Check the spelling and try again.`);
+        throw new Error('Dictionary API error: ' + res.status);
+      }
+
+      const entries = Array.isArray(res.data) ? res.data : [res.data];
+      const entry = entries[0];
+
+      currentWordData = {
+        word: entry.word,
+        phonetic: entry.phonetic || entry.phonetics?.find(p => p.text)?.text || '',
+        audioUrl: entry.phonetics?.find(p => p.audio)?.audio || '',
+        meanings: entry.meanings.map(m => ({
+          partOfSpeech: m.partOfSpeech,
+          definitions: m.definitions.slice(0, 3).map(d => ({
+            definition: d.definition,
+            example: d.example || '',
+            synonyms: (d.synonyms || []).slice(0, 5)
+          })),
+          synonyms: (m.synonyms || []).slice(0, 6)
+        }))
+      };
+
+      // Add to vocabulary list if not already there
+      if (!vocabulary.find(v => v.word === currentWordData.word)) {
+        vocabulary.push({
+          word: currentWordData.word,
+          phonetic: currentWordData.phonetic,
+          partOfSpeech: currentWordData.meanings[0]?.partOfSpeech || '',
+          definition: currentWordData.meanings[0]?.definitions[0]?.definition || ''
+        });
+      }
+
+      renderWord(currentWordData);
+      renderVocabList();
+      sendState();
+
+      return {
+        word: currentWordData.word,
+        phonetic: currentWordData.phonetic,
+        meanings: currentWordData.meanings.map(m => ({
+          partOfSpeech: m.partOfSpeech,
+          definitions: m.definitions.map(d => d.definition),
+          examples: m.definitions.filter(d => d.example).map(d => d.example),
+          synonyms: m.synonyms
+        })),
+        vocabularySize: vocabulary.length
+      };
+    }
+
+    function getVocabList() {
+      return {
+        words: vocabulary,
+        count: vocabulary.length,
+        message: vocabulary.length > 0
+          ? `${vocabulary.length} words in vocabulary list: ${vocabulary.map(v => v.word).join(', ')}`
+          : 'No words looked up yet.'
+      };
+    }
+
+    function sendState() {
+      send({
+        type: 'STATE_UPDATE',
+        pluginId: 'dictionary',
+        stateSummary: { vocabulary, currentWordData },
+        description: `Vocabulary: ${vocabulary.length} words. Last: ${currentWordData?.word || 'none'}`
+      });
+    }
+
+    function renderWord(data) {
+      if (!data) return;
+      const content = document.getElementById('wordContent');
+
+      let meaningsHtml = data.meanings.map(m => {
+        const defsHtml = m.definitions.map(d => `
+          <div class="definition">${d.definition}</div>
+          ${d.example ? `<div class="example">"${d.example}"</div>` : ''}
+          ${d.synonyms.length > 0 ? `<div class="synonyms">Synonyms: ${d.synonyms.map(s => `<span>${s}</span>`).join('')}</div>` : ''}
+        `).join('');
+        const synHtml = m.synonyms.length > 0 ? `<div class="synonyms" style="margin-top:8px">Related: ${m.synonyms.map(s => `<span>${s}</span>`).join('')}</div>` : '';
+        return `<div class="meaning"><div class="pos">${m.partOfSpeech}</div>${defsHtml}${synHtml}</div>`;
+      }).join('');
+
+      content.innerHTML = `
+        <div class="word-card">
+          <div class="word-title">${data.word}</div>
+          ${data.phonetic ? `<div class="phonetic">${data.phonetic}</div>` : ''}
+          ${data.audioUrl ? `<button class="audio-btn" onclick="playAudio('${data.audioUrl}')">🔊 Listen</button>` : ''}
+          ${meaningsHtml}
+        </div>
+      `;
+    }
+
+    function renderVocabList() {
+      const el = document.getElementById('vocabList');
+      if (vocabulary.length === 0) { el.innerHTML = ''; return; }
+
+      el.innerHTML = `
+        <div class="vocab-list">
+          <h3>📝 My Vocabulary List</h3>
+          ${vocabulary.map(v => `
+            <div class="vocab-word" onclick="doSearchWord('${v.word}')">
+              <span class="vw-word">${v.word}</span>
+              <span class="vw-pos">${v.partOfSpeech}</span>
+            </div>
+          `).join('')}
+          <div class="vocab-count">${vocabulary.length} word${vocabulary.length !== 1 ? 's' : ''} learned</div>
+        </div>
+      `;
+    }
+
+    function playAudio(url) {
+      new Audio(url).play().catch(() => {});
+    }
+
+    function doSearch() {
+      const word = document.getElementById('searchInput').value.trim();
+      if (word) lookupWord(word).catch(err => {
+        document.getElementById('wordContent').innerHTML = `<div class="error-msg">${err.message}</div>`;
+      });
+    }
+
+    function doSearchWord(word) {
+      document.getElementById('searchInput').value = word;
+      doSearch();
+    }
+
+    // ── Init ──
+    send({ type: 'APP_READY', pluginId: 'dictionary' });
+  </script>
+</body>
+</html>

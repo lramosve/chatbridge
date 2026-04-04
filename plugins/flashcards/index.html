@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flashcards - ChatBridge Plugin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 16px; background: #faf5ff; color: #1a1a2e; display: flex; flex-direction: column; align-items: center; }
+    .header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .header h2 { font-size: 18px; color: #7c3aed; }
+    .topic-badge { background: #ede9fe; color: #7c3aed; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+    .card-container { perspective: 800px; width: min(360px, 90vw); height: 220px; margin-bottom: 16px; cursor: pointer; }
+    .card { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.5s ease; }
+    .card.flipped { transform: rotateY(180deg); }
+    .card-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; border-radius: 16px; backface-visibility: hidden; font-size: 20px; font-weight: 600; text-align: center; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .card-front { background: white; border: 2px solid #e9d5ff; color: #1a1a2e; }
+    .card-back { background: linear-gradient(135deg, #7c3aed, #a78bfa); color: white; transform: rotateY(180deg); }
+    .hint { font-size: 12px; color: #a78bfa; margin-bottom: 12px; }
+    .buttons { display: flex; gap: 10px; margin-bottom: 16px; }
+    .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.1s; }
+    .btn:active { transform: scale(0.97); }
+    .btn-wrong { background: #fee2e2; color: #dc2626; }
+    .btn-wrong:hover { background: #fecaca; }
+    .btn-right { background: #dcfce7; color: #16a34a; }
+    .btn-right:hover { background: #bbf7d0; }
+    .btn-skip { background: #f1f5f9; color: #64748b; }
+    .btn-skip:hover { background: #e2e8f0; }
+    .progress { width: min(360px, 90vw); margin-bottom: 12px; }
+    .progress-bar { height: 6px; background: #e9d5ff; border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #7c3aed; border-radius: 3px; transition: width 0.3s; }
+    .stats { display: flex; gap: 16px; font-size: 13px; color: #64748b; margin-bottom: 8px; }
+    .stats .correct { color: #16a34a; font-weight: 600; }
+    .stats .incorrect { color: #dc2626; font-weight: 600; }
+    .empty { text-align: center; color: #a78bfa; padding: 48px 16px; font-size: 14px; line-height: 1.6; }
+    .done { text-align: center; padding: 32px; }
+    .done h3 { color: #7c3aed; font-size: 20px; margin-bottom: 8px; }
+    .done .score { font-size: 48px; font-weight: 700; color: #7c3aed; margin: 12px 0; }
+    .done p { color: #64748b; font-size: 14px; }
+    .btn-restart { background: #7c3aed; color: white; margin-top: 16px; }
+    .btn-restart:hover { background: #6d28d9; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span style="font-size:24px;">📚</span>
+    <h2>Flashcard Quiz</h2>
+  </div>
+  <div id="content">
+    <div class="empty">Ask the chatbot to create flashcards on any topic!<br><br>Try: "Create flashcards for Spanish greetings" or<br>"Help me study the periodic table elements"</div>
+  </div>
+
+  <script>
+    let seq = 0;
+    let deck = [];
+    let topic = '';
+    let currentIndex = 0;
+    let isFlipped = false;
+    let correct = 0;
+    let incorrect = 0;
+    let reviewed = new Set();
+    const fetchPending = new Map();
+
+    function send(payload) {
+      window.parent.postMessage({
+        protocol: 'chatbridge',
+        correlationId: payload.correlationId || crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        seq: seq++,
+        ...payload
+      }, '*');
+    }
+
+    window.addEventListener('message', async (event) => {
+      const data = event.data;
+      if (!data || data.protocol !== 'chatbridge') return;
+
+      if (data.type === 'TOOL_INVOKE') {
+        try {
+          let result;
+          switch (data.toolName) {
+            case 'create_deck': result = handleCreateDeck(data.parameters); break;
+            case 'get_study_progress': result = handleGetProgress(); break;
+            default: throw new Error(`Unknown tool: ${data.toolName}`);
+          }
+          send({ type: 'TOOL_RESULT', correlationId: data.correlationId, status: 'success', data: result });
+        } catch (err) {
+          send({ type: 'TOOL_RESULT', correlationId: data.correlationId, status: 'error', data: null, errorMessage: err.message });
+        }
+      }
+
+      if (data.type === 'RESTORE_STATE' && data.lastStateSummary) {
+        const s = data.lastStateSummary;
+        if (s.deck && s.deck.length > 0) {
+          deck = s.deck;
+          topic = s.topic || '';
+          currentIndex = s.currentIndex || 0;
+          correct = s.correct || 0;
+          incorrect = s.incorrect || 0;
+          reviewed = new Set(s.reviewed || []);
+          renderCard();
+        }
+      }
+    });
+
+    function handleCreateDeck(params) {
+      topic = params.topic;
+      try {
+        deck = typeof params.cards === 'string' ? JSON.parse(params.cards) : params.cards;
+      } catch (e) {
+        throw new Error('Invalid cards format. Provide a JSON array of {front, back} objects.');
+      }
+      if (!Array.isArray(deck) || deck.length === 0) {
+        throw new Error('Cards array is empty.');
+      }
+      currentIndex = 0;
+      correct = 0;
+      incorrect = 0;
+      reviewed = new Set();
+      isFlipped = false;
+      renderCard();
+      sendState();
+      return {
+        topic,
+        cardCount: deck.length,
+        message: `Created ${deck.length} flashcards on "${topic}". The student can now study in the side panel.`
+      };
+    }
+
+    function handleGetProgress() {
+      const total = deck.length;
+      const pct = total > 0 ? Math.round((reviewed.size / total) * 100) : 0;
+      const needsPractice = deck.filter((_, i) => !reviewed.has(i)).map(c => c.front);
+      return {
+        topic,
+        totalCards: total,
+        reviewed: reviewed.size,
+        correct,
+        incorrect,
+        percentComplete: pct,
+        accuracy: reviewed.size > 0 ? Math.round((correct / reviewed.size) * 100) : 0,
+        needsPractice,
+        message: `${reviewed.size}/${total} cards reviewed (${pct}%). Accuracy: ${reviewed.size > 0 ? Math.round((correct / reviewed.size) * 100) : 0}%.${needsPractice.length > 0 ? ` Cards needing practice: ${needsPractice.slice(0, 3).join(', ')}${needsPractice.length > 3 ? '...' : ''}` : ' All cards reviewed!'}`
+      };
+    }
+
+    function sendState() {
+      send({
+        type: 'STATE_UPDATE',
+        pluginId: 'flashcards',
+        stateSummary: { deck, topic, currentIndex, correct, incorrect, reviewed: [...reviewed] },
+        description: `Studying "${topic}": ${reviewed.size}/${deck.length} reviewed, ${correct} correct, ${incorrect} incorrect`
+      });
+    }
+
+    function renderCard() {
+      const content = document.getElementById('content');
+
+      if (deck.length === 0) {
+        content.innerHTML = '<div class="empty">Ask the chatbot to create flashcards on any topic!<br><br>Try: "Create flashcards for Spanish greetings" or<br>"Help me study the periodic table elements"</div>';
+        return;
+      }
+
+      if (reviewed.size >= deck.length) {
+        const accuracy = Math.round((correct / deck.length) * 100);
+        content.innerHTML = `
+          <div class="done">
+            <h3>Session Complete!</h3>
+            <div class="topic-badge">${topic}</div>
+            <div class="score">${accuracy}%</div>
+            <p>${correct} correct, ${incorrect} incorrect out of ${deck.length} cards</p>
+            <button class="btn btn-restart" onclick="restart()">Study Again</button>
+          </div>
+        `;
+        send({
+          type: 'APP_COMPLETE',
+          pluginId: 'flashcards',
+          resultSummary: `Flashcard session complete: ${correct}/${deck.length} correct (${accuracy}%) on "${topic}"`,
+          data: handleGetProgress()
+        });
+        return;
+      }
+
+      const card = deck[currentIndex];
+      const pct = Math.round((reviewed.size / deck.length) * 100);
+
+      content.innerHTML = `
+        <div class="topic-badge">${topic}</div>
+        <div class="progress">
+          <div class="stats">
+            <span>Card ${reviewed.size + 1} of ${deck.length}</span>
+            <span class="correct">✓ ${correct}</span>
+            <span class="incorrect">✗ ${incorrect}</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="card-container" onclick="flipCard()">
+          <div class="card" id="flashcard">
+            <div class="card-face card-front">${card.front}</div>
+            <div class="card-face card-back">${card.back}</div>
+          </div>
+        </div>
+        <div class="hint">Click the card to flip it</div>
+        <div class="buttons" id="answerBtns" style="display:none;">
+          <button class="btn btn-wrong" onclick="answer(false)">✗ Got it wrong</button>
+          <button class="btn btn-right" onclick="answer(true)">✓ Got it right</button>
+        </div>
+      `;
+      isFlipped = false;
+    }
+
+    function flipCard() {
+      const card = document.getElementById('flashcard');
+      if (!card) return;
+      isFlipped = !isFlipped;
+      card.classList.toggle('flipped', isFlipped);
+      if (isFlipped) {
+        document.getElementById('answerBtns').style.display = 'flex';
+        document.querySelector('.hint').textContent = 'Did you get it right?';
+      }
+    }
+
+    function answer(wasCorrect) {
+      reviewed.add(currentIndex);
+      if (wasCorrect) correct++;
+      else incorrect++;
+
+      // Move to next unreviewed card
+      let next = (currentIndex + 1) % deck.length;
+      let attempts = 0;
+      while (reviewed.has(next) && attempts < deck.length) {
+        next = (next + 1) % deck.length;
+        attempts++;
+      }
+      currentIndex = next;
+      renderCard();
+      sendState();
+    }
+
+    function restart() {
+      currentIndex = 0;
+      correct = 0;
+      incorrect = 0;
+      reviewed = new Set();
+      isFlipped = false;
+      renderCard();
+      sendState();
+    }
+
+    // ── Init ──
+    send({ type: 'APP_READY', pluginId: 'flashcards' });
+  </script>
+</body>
+</html>
