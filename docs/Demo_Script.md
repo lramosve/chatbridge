@@ -1,7 +1,7 @@
 # ChatBridge Demo Script (~4:30)
 
 ## Intro (0:00 - 0:20)
-**Say:** "ChatBridge is an AI chat platform designed for K-12 education where third-party learning apps live inside the conversation. The key challenge: teachers need apps to be sandboxed for student safety, the AI must stay aware of what students are doing, and interactions need clear start and end points. I'll show how the plugin lifecycle handles this with five apps — but we'll focus on three that demonstrate the core patterns."
+**Say:** "ChatBridge is an AI chat platform designed for K-12 education where third-party learning apps live inside the conversation. The key challenge: teachers need apps to be sandboxed for student safety, the AI must stay aware of what students are doing, and interactions need clear start and end points. I'll show how the plugin lifecycle handles this with six apps — but we'll focus on three that demonstrate the core patterns."
 
 **Show:** The main chat screen at chatbridge-delta.vercel.app
 
@@ -76,7 +76,7 @@
 
 **Three** — Plugin tools as AI SDK function calls. Each app publishes a manifest declaring tools as JSON Schema. The LLM sees them alongside built-in tools and routes naturally. No custom routing logic — function calling handles it.
 
-Five apps, three patterns — internal, public API, and OAuth — all running through the same protocol. And every interaction has a clear lifecycle: registration, invocation, state updates, and completion. That's what makes this work for K-12 — teachers get visibility, students get interactive learning, and the platform keeps everyone safe."
+Six apps, three patterns — internal, public API, and OAuth — all running through the same protocol. And every interaction has a clear lifecycle: registration, invocation, state updates, and completion. That's what makes this work for K-12 — teachers get visibility, students get interactive learning, and the platform keeps everyone safe."
 
 ---
 

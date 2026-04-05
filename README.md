@@ -2,7 +2,7 @@
 
 **An AI Chat Platform with Third-Party App Integration**
 
-ChatBridge is a fork of [Chatbox](https://github.com/chatboxai/chatbox) that adds a plugin system for third-party apps to live inside the chat experience. Students can play chess, check weather, or create GitHub Gists — all without leaving the conversation, with the chatbot staying aware of app state the entire time.
+ChatBridge is a fork of [Chatbox](https://github.com/chatboxai/chatbox) that adds a plugin system for third-party apps to live inside the chat experience. Built for K-12 education: students can study flashcards, look up vocabulary, play chess, check assignments in Google Classroom, and more — all without leaving the conversation, with the chatbot staying aware of app state the entire time.
 
 **Live demo:** [chatbridge-delta.vercel.app](https://chatbridge-delta.vercel.app)
 
@@ -110,8 +110,11 @@ The `vercel.json` config handles build commands, output directory, and SPA rewri
 | Plugin | Type | Auth | Description |
 |--------|------|------|-------------|
 | Chess | Internal (stateful) | None | Interactive chess board with LLM as opponent. User moves on the board; LLM responds automatically via `make_move`. |
+| Flashcards | Internal (stateful) | None | LLM generates decks on any topic. Flip-card UI, progress tracking, APP_COMPLETE on deck finish. |
+| Dictionary | External (public API) | None | Word definitions, pronunciation, vocabulary list via dictionaryapi.dev. API calls proxied through `FETCH_REQUEST`. |
 | Weather | External (public API) | None | Current conditions + 3-day forecast via Open-Meteo. API calls proxied through `FETCH_REQUEST`. |
 | GitHub Gists | External (OAuth) | OAuth2 | Search repos (public, no auth) + create Gists (requires OAuth). Token exchange via Supabase Edge Function. |
+| Google Classroom | External (OAuth) | OAuth2 | Real K-12 integration: student courses, assignments, announcements. Direct Google OAuth flow. |
 
 ### Building a Plugin
 

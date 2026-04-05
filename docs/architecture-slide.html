@@ -46,8 +46,8 @@
     .msg .mname { font-size: 13px; font-weight: 600; color: #e6edf3; }
     .msg .mdesc { font-size: 12px; color: #8b949e; margin-left: auto; }
 
-    .apps { width: 100%; max-width: 1200px; display: flex; gap: 20px; }
-    .app-card { flex: 1; background: #161b22; border-radius: 12px; padding: 18px; text-align: center; }
+    .apps { width: 100%; max-width: 1200px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .app-card { background: #161b22; border-radius: 12px; padding: 16px; text-align: center; }
     .app-card.chess { border: 2px solid #f85149; }
     .app-card.weather { border: 2px solid #58a6ff; }
     .app-card.github { border: 2px solid #3fb950; }
@@ -123,19 +123,37 @@
       <div class="icon">♟️</div>
       <h4>Chess</h4>
       <div class="type">Internal App</div>
-      <div class="detail">No auth, no external API<br>Complex state (FEN)<br>Bidirectional communication</div>
+      <div class="detail">Strategic thinking<br>Complex state (FEN)<br>AI plays as opponent</div>
+    </div>
+    <div class="app-card chess">
+      <div class="icon">📚</div>
+      <h4>Flashcards</h4>
+      <div class="type">Internal App</div>
+      <div class="detail">Study any topic<br>Progress tracking<br>APP_COMPLETE on finish</div>
+    </div>
+    <div class="app-card weather">
+      <div class="icon">📖</div>
+      <h4>Dictionary</h4>
+      <div class="type">External (Public)</div>
+      <div class="detail">dictionaryapi.dev<br>Vocab list building<br>FETCH_REQUEST proxy</div>
     </div>
     <div class="app-card weather">
       <div class="icon">🌤️</div>
       <h4>Weather</h4>
       <div class="type">External (Public)</div>
-      <div class="detail">No user auth<br>Open-Meteo API via fetch proxy<br>Simple request/response</div>
+      <div class="detail">Open-Meteo API<br>No auth required<br>FETCH_REQUEST proxy</div>
     </div>
     <div class="app-card github">
       <div class="icon">🐙</div>
       <h4>GitHub Gists</h4>
       <div class="type">External (OAuth)</div>
-      <div class="detail">OAuth popup + PKCE<br>Token exchange via Edge Function<br>User-specific data</div>
+      <div class="detail">OAuth popup flow<br>Token via Edge Function<br>CS education</div>
+    </div>
+    <div class="app-card github">
+      <div class="icon">🎓</div>
+      <h4>Google Classroom</h4>
+      <div class="type">External (OAuth)</div>
+      <div class="detail">Real K-12 integration<br>Courses, assignments<br>Google OAuth</div>
     </div>
   </div>
 
