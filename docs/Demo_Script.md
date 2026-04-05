@@ -36,17 +36,21 @@
 
 ---
 
-## Scene 3: Chess — Stateful Interaction + AI as Opponent (2:10 - 3:10)
-**Covers:** Scenario #4 (context retention), #5 (multiple apps)
+## Scene 3: Google Classroom — OAuth + Real K-12 Integration (2:10 - 3:10)
+**Covers:** Scenario #4 (context retention), #5 (multiple apps), OAuth flow
 
-1. Type: **"Let's play chess"**
-2. **Show:** Side panel switches to Chess, board appears
-3. **Make a move on the board** (e.g., d4)
-4. **Show:** Auto-submitted message "I played d4. Your turn." — LLM responds with its move
-5. **Say:** "The board sends STATE_UPDATE with the FEN string after each move. The platform auto-submits a message to trigger the AI's response — no manual typing needed. The LLM plays as the opponent."
-6. Type: **"I resign"**
-7. **Show:** APP_COMPLETE fires, "Complete" badge appears in the side panel
-8. **Say:** "Again, explicit completion signaling. The game ended, the app told us, the platform recorded it."
+1. Type: **"Show me my Google Classroom courses"**
+2. **Show:** LLM calls `google-classroom__list_courses`, gets AUTH_REQUIRED, tells user to connect
+3. **Say:** "This is the OAuth pattern — the platform has to handle user authorization for a real third-party service. Let me connect."
+4. **Enter Client ID and Secret** in the side panel, click **Connect Google Classroom**
+5. **Show:** OAuth popup opens, user authorizes, popup closes, "Connected as [email]"
+6. **Say:** "The popup handles the OAuth redirect — the sandboxed iframe can't do that directly. Token exchange happens through a Supabase Edge Function since Google blocks browser CORS."
+7. Type: **"Show me my courses again"**
+8. **Show:** Real courses from the user's Google Classroom account appear in the side panel
+9. Click on a course to show assignments
+10. Type: **"What's due soon in [course name]?"**
+11. **Show:** LLM calls `google-classroom__list_assignments` and lists upcoming work with due dates
+12. **Say:** "This is the K-12 value proposition at work. The AI can answer 'what's due?' by querying the student's real Google Classroom. No context-switching, no opening Classroom in a new tab. And because of the STATE_UPDATE protocol, the AI remembers which course we were looking at."
 
 ---
 

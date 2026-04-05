@@ -225,7 +225,7 @@ export const ToolCallPartUI: FC<{ part: MessageToolCallPart }> = ({ part }) => {
 }
 
 const PLUGIN_ICONS: Record<string, string> = {
-  chess: '♟️', weather: '🌤️', github: '🐙', flashcards: '📚', dictionary: '📖',
+  chess: '♟️', weather: '🌤️', github: '🐙', flashcards: '📚', dictionary: '📖', 'google-classroom': '🎓',
 }
 
 /** Plugin tool calls show a branded header with "View in panel" link */

@@ -9,6 +9,7 @@ ChatBridge ships with 5 plugins demonstrating different integration patterns.
 | **Dictionary** | External (Public API) | None | TOOL_INVOKE, TOOL_RESULT, FETCH_REQUEST/RESPONSE, STATE_UPDATE (vocab list) | Vocabulary building, pronunciation |
 | **Weather** | External (Public API) | None | TOOL_INVOKE, TOOL_RESULT, FETCH_REQUEST/RESPONSE, STATE_UPDATE | Geography, climate awareness |
 | **GitHub Gists** | External (OAuth) | OAuth2 | TOOL_INVOKE, TOOL_RESULT, FETCH_REQUEST/RESPONSE, APP_COMPLETE (gist created) | CS education, code notebooks |
+| **Google Classroom** | External (OAuth) | OAuth2 | TOOL_INVOKE, TOOL_RESULT, FETCH_REQUEST/RESPONSE, STATE_UPDATE | Direct K-12 integration: courses, assignments, announcements |
 
 ## Three Integration Patterns
 

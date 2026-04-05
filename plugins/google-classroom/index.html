@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Classroom - ChatBridge Plugin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 16px; background: #f8fafc; color: #1a1a2e; }
+    .header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .header h2 { font-size: 18px; color: #1a73e8; }
+    .auth-banner { background: white; border: 2px solid #e0e0e0; border-radius: 12px; padding: 16px; margin-bottom: 16px; text-align: center; }
+    .auth-banner.connected { border-color: #34a853; }
+    .auth-inputs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; align-items: center; }
+    .auth-inputs input { padding: 8px 12px; background: #f8fafc; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 12px; width: 300px; outline: none; }
+    .auth-inputs input:focus { border-color: #1a73e8; }
+    .auth-btn { background: #1a73e8; color: white; border: none; padding: 10px 24px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .auth-btn:hover { background: #1765cc; }
+    .auth-btn.disconnect { background: #9aa0a6; }
+    .course-list { display: flex; flex-direction: column; gap: 10px; }
+    .course-card { background: white; border: 1px solid #e0e0e0; border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.2s; }
+    .course-card:hover { border-color: #1a73e8; box-shadow: 0 2px 8px rgba(26,115,232,0.1); }
+    .course-name { font-size: 15px; font-weight: 600; color: #1a73e8; margin-bottom: 2px; }
+    .course-section { font-size: 12px; color: #5f6368; }
+    .course-id { font-size: 10px; color: #9aa0a6; margin-top: 4px; font-family: monospace; }
+
+    .assignment-list, .announcement-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .item-card { background: white; border-left: 3px solid #1a73e8; padding: 12px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+    .item-card.assignment { border-left-color: #f9ab00; }
+    .item-card.announcement { border-left-color: #34a853; }
+    .item-title { font-size: 14px; font-weight: 600; color: #1a1a2e; margin-bottom: 4px; }
+    .item-meta { font-size: 11px; color: #5f6368; margin-bottom: 6px; }
+    .item-due { color: #d93025; font-weight: 600; }
+    .item-desc { font-size: 12px; color: #3c4043; line-height: 1.4; }
+    .section-title { font-size: 13px; font-weight: 600; color: #5f6368; text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px; }
+    .back-btn { background: transparent; border: 1px solid #e0e0e0; color: #1a73e8; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; margin-bottom: 12px; }
+    .back-btn:hover { background: #f1f3f4; }
+    .empty { text-align: center; color: #9aa0a6; padding: 32px; font-size: 14px; line-height: 1.6; }
+    .status-msg { font-size: 13px; color: #34a853; margin-top: 8px; text-align: center; }
+    .status-msg.error { color: #d93025; }
+    .user-badge { font-size: 12px; color: #5f6368; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span style="font-size:22px;">🎓</span>
+    <h2>Google Classroom</h2>
+  </div>
+
+  <div class="auth-banner" id="authBanner">
+    <p id="authMsg" style="color: #5f6368; font-size: 13px; margin-bottom: 8px;">Connect your Google Classroom account</p>
+    <div class="auth-inputs" id="authInputs">
+      <input type="text" id="clientIdInput" placeholder="Google OAuth Client ID">
+      <input type="text" id="clientSecretInput" placeholder="Google OAuth Client Secret">
+    </div>
+    <button class="auth-btn" id="authBtn" onclick="handleAuth()">Connect Google Classroom</button>
+    <div class="user-badge" id="userBadge"></div>
+  </div>
+
+  <div id="content">
+    <div class="empty">Connect your Google account to see your courses, assignments, and announcements.</div>
+  </div>
+
+  <div id="statusMsg" class="status-msg"></div>
+
+  <script>
+    const SCOPES = 'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.coursework.me.readonly https://www.googleapis.com/auth/classroom.announcements.readonly';
+    const TOKEN_EXCHANGE_URL = 'https://scfugfkzbzbkddbasjhx.supabase.co/functions/v1/google-token-exchange';
+
+    let seq = 0;
+    let clientId = '';
+    let clientSecret = '';
+    let accessToken = null;
+    let userEmail = null;
+    let courses = [];
+    let selectedCourseId = null;
+    const fetchPending = new Map();
+
+    function send(payload) {
+      window.parent.postMessage({
+        protocol: 'chatbridge',
+        correlationId: payload.correlationId || crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        seq: seq++,
+        ...payload
+      }, '*');
+    }
+
+    function bridgeFetch(url, options) {
+      const correlationId = crypto.randomUUID();
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => { fetchPending.delete(correlationId); reject(new Error('Fetch proxy timeout')); }, 15000);
+        fetchPending.set(correlationId, {
+          resolve: (val) => { clearTimeout(timeout); resolve(val); },
+          reject: (err) => { clearTimeout(timeout); reject(err); }
+        });
+        send({ type: 'FETCH_REQUEST', pluginId: 'google-classroom', correlationId, url, options });
+      });
+    }
+
+    window.addEventListener('message', async (event) => {
+      const data = event.data;
+      if (!data) return;
+
+      if (data.protocol === 'chatbridge' && data.type === 'FETCH_RESPONSE') {
+        const pending = fetchPending.get(data.correlationId);
+        if (pending) {
+          fetchPending.delete(data.correlationId);
+          if (data.errorMessage) pending.reject(new Error(data.errorMessage));
+          else pending.resolve({ ok: data.ok, status: data.status, data: data.data });
+        }
+        return;
+      }
+
+      if (data.type === 'google-auth-code' && data.code) {
+        await exchangeCodeForToken(data.code);
+        return;
+      }
+
+      if (data.protocol !== 'chatbridge') return;
+
+      if (data.type === 'TOOL_INVOKE') {
+        try {
+          let result;
+          switch (data.toolName) {
+            case 'list_courses': result = await listCourses(); break;
+            case 'list_assignments': result = await listAssignments(data.parameters.courseId); break;
+            case 'list_announcements': result = await listAnnouncements(data.parameters.courseId); break;
+            case 'get_auth_status': result = { authenticated: !!accessToken, user: userEmail }; break;
+            default: throw new Error(`Unknown tool: ${data.toolName}`);
+          }
+          send({ type: 'TOOL_RESULT', correlationId: data.correlationId, status: 'success', data: result });
+        } catch (err) {
+          send({ type: 'TOOL_RESULT', correlationId: data.correlationId, status: 'error', data: null, errorMessage: err.message });
+        }
+      }
+
+      if (data.type === 'RESTORE_STATE' && data.lastStateSummary) {
+        const s = data.lastStateSummary;
+        if (s.accessToken) {
+          accessToken = s.accessToken;
+          userEmail = s.userEmail || null;
+          clientId = s.clientId || '';
+          clientSecret = s.clientSecret || '';
+          document.getElementById('authInputs').style.display = 'none';
+          updateAuthUI();
+        }
+        if (s.courses) { courses = s.courses; renderCourses(); }
+      }
+    });
+
+    function handleAuth() {
+      if (accessToken) {
+        accessToken = null; userEmail = null; clientId = ''; clientSecret = '';
+        document.getElementById('authInputs').style.display = 'flex';
+        updateAuthUI();
+        send({ type: 'STATE_UPDATE', pluginId: 'google-classroom', stateSummary: { authenticated: false }, description: 'Google Classroom disconnected' });
+        return;
+      }
+
+      clientId = document.getElementById('clientIdInput').value.trim();
+      clientSecret = document.getElementById('clientSecretInput').value.trim();
+
+      if (!clientId || !clientSecret) {
+        showStatus('Please enter both Client ID and Client Secret', true);
+        return;
+      }
+
+      const redirectUri = window.location.origin.replace('//localhost:', '//127.0.0.1:') + '/plugins/google-classroom/callback.html';
+      const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: SCOPES,
+        access_type: 'offline',
+        prompt: 'consent',
+      });
+      window.open(`https://accounts.google.com/o/oauth2/v2/auth?${params}`, 'google-auth', 'width=600,height=700');
+    }
+
+    async function exchangeCodeForToken(code) {
+      try {
+        showStatus('Exchanging auth code...');
+        const redirectUri = window.location.origin.replace('//localhost:', '//127.0.0.1:') + '/plugins/google-classroom/callback.html';
+        const res = await bridgeFetch(TOKEN_EXCHANGE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri }),
+        });
+
+        if (!res.ok || res.data?.error) {
+          showStatus('Token exchange failed: ' + (res.data?.error_description || res.data?.error || 'unknown'), true);
+          return;
+        }
+
+        accessToken = res.data.access_token;
+        document.getElementById('authInputs').style.display = 'none';
+
+        // Load user profile
+        const profileRes = await bridgeFetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (profileRes.ok) userEmail = profileRes.data.email;
+
+        updateAuthUI();
+        showStatus(`Connected as ${userEmail || 'Google User'}`);
+        send({
+          type: 'STATE_UPDATE', pluginId: 'google-classroom',
+          stateSummary: { authenticated: true, user: userEmail, accessToken, userEmail, clientId, clientSecret },
+          description: `Google Classroom connected as ${userEmail || 'user'}`
+        });
+      } catch (err) {
+        showStatus('Token exchange error: ' + err.message, true);
+      }
+    }
+
+    function updateAuthUI() {
+      const banner = document.getElementById('authBanner');
+      const btn = document.getElementById('authBtn');
+      const msg = document.getElementById('authMsg');
+      const badge = document.getElementById('userBadge');
+      if (accessToken) {
+        banner.classList.add('connected');
+        msg.textContent = `Connected as ${userEmail || 'Google User'}`;
+        btn.textContent = 'Disconnect';
+        btn.classList.add('disconnect');
+        badge.textContent = '';
+      } else {
+        banner.classList.remove('connected');
+        msg.textContent = 'Connect your Google Classroom account';
+        btn.textContent = 'Connect Google Classroom';
+        btn.classList.remove('disconnect');
+        badge.textContent = '';
+      }
+    }
+
+    async function listCourses() {
+      if (!accessToken) throw new Error('AUTH_REQUIRED: Please connect your Google Classroom account first.');
+
+      const res = await bridgeFetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch courses: ' + (res.data?.error?.message || res.status));
+
+      courses = (res.data.courses || []).map(c => ({
+        id: c.id,
+        name: c.name,
+        section: c.section || '',
+        description: c.description || '',
+        teacherGroupEmail: c.teacherGroupEmail || '',
+      }));
+
+      selectedCourseId = null;
+      renderCourses();
+      send({
+        type: 'STATE_UPDATE', pluginId: 'google-classroom',
+        stateSummary: { accessToken, userEmail, clientId, clientSecret, courses },
+        description: `Loaded ${courses.length} courses`
+      });
+      return { courses, count: courses.length };
+    }
+
+    async function listAssignments(courseId) {
+      if (!accessToken) throw new Error('AUTH_REQUIRED: Please connect your Google Classroom account first.');
+
+      const res = await bridgeFetch(`https://classroom.googleapis.com/v1/courses/${courseId}/courseWork?orderBy=dueDate%20desc`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch assignments: ' + (res.data?.error?.message || res.status));
+
+      const assignments = (res.data.courseWork || []).slice(0, 10).map(a => {
+        const dueDate = a.dueDate ? `${a.dueDate.year}-${String(a.dueDate.month).padStart(2,'0')}-${String(a.dueDate.day).padStart(2,'0')}` : null;
+        return {
+          id: a.id,
+          title: a.title,
+          description: a.description || '',
+          workType: a.workType || 'ASSIGNMENT',
+          dueDate,
+          maxPoints: a.maxPoints,
+          state: a.state,
+          link: a.alternateLink,
+        };
+      });
+
+      selectedCourseId = courseId;
+      renderAssignments(assignments);
+      return { courseId, assignments, count: assignments.length };
+    }
+
+    async function listAnnouncements(courseId) {
+      if (!accessToken) throw new Error('AUTH_REQUIRED: Please connect your Google Classroom account first.');
+
+      const res = await bridgeFetch(`https://classroom.googleapis.com/v1/courses/${courseId}/announcements?pageSize=10`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch announcements: ' + (res.data?.error?.message || res.status));
+
+      const announcements = (res.data.announcements || []).map(a => ({
+        id: a.id,
+        text: a.text || '',
+        creationTime: a.creationTime,
+        link: a.alternateLink,
+      }));
+
+      selectedCourseId = courseId;
+      renderAnnouncements(announcements);
+      return { courseId, announcements, count: announcements.length };
+    }
+
+    function renderCourses() {
+      const content = document.getElementById('content');
+      if (courses.length === 0) {
+        content.innerHTML = '<div class="empty">No active courses found.</div>';
+        return;
+      }
+      content.innerHTML = `
+        <div class="section-title">Your Courses (${courses.length})</div>
+        <div class="course-list">
+          ${courses.map(c => `
+            <div class="course-card" onclick="selectCourse('${c.id}')">
+              <div class="course-name">${c.name}</div>
+              ${c.section ? `<div class="course-section">${c.section}</div>` : ''}
+              <div class="course-id">ID: ${c.id}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderAssignments(assignments) {
+      const course = courses.find(c => c.id === selectedCourseId);
+      const content = document.getElementById('content');
+      content.innerHTML = `
+        <button class="back-btn" onclick="renderCourses()">← Back to courses</button>
+        <div class="section-title">${course?.name || 'Course'} — Assignments</div>
+        ${assignments.length === 0 ? '<div class="empty">No assignments for this course.</div>' : `
+          <div class="assignment-list">
+            ${assignments.map(a => `
+              <div class="item-card assignment">
+                <div class="item-title">${a.title}</div>
+                <div class="item-meta">
+                  ${a.workType.replace('_', ' ')}
+                  ${a.dueDate ? ` • <span class="item-due">Due ${a.dueDate}</span>` : ''}
+                  ${a.maxPoints ? ` • ${a.maxPoints} pts` : ''}
+                </div>
+                ${a.description ? `<div class="item-desc">${a.description.substring(0, 200)}${a.description.length > 200 ? '...' : ''}</div>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        `}
+      `;
+    }
+
+    function renderAnnouncements(announcements) {
+      const course = courses.find(c => c.id === selectedCourseId);
+      const content = document.getElementById('content');
+      content.innerHTML = `
+        <button class="back-btn" onclick="renderCourses()">← Back to courses</button>
+        <div class="section-title">${course?.name || 'Course'} — Announcements</div>
+        ${announcements.length === 0 ? '<div class="empty">No announcements yet.</div>' : `
+          <div class="announcement-list">
+            ${announcements.map(a => `
+              <div class="item-card announcement">
+                <div class="item-meta">${new Date(a.creationTime).toLocaleDateString()}</div>
+                <div class="item-desc">${a.text.substring(0, 300)}${a.text.length > 300 ? '...' : ''}</div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      `;
+    }
+
+    function selectCourse(courseId) {
+      listAssignments(courseId);
+    }
+
+    function showStatus(msg, isError = false) {
+      const el = document.getElementById('statusMsg');
+      el.textContent = msg;
+      el.className = `status-msg ${isError ? 'error' : ''}`;
+      setTimeout(() => { el.textContent = ''; }, 5000);
+    }
+
+    send({ type: 'APP_READY', pluginId: 'google-classroom' });
+  </script>
+</body>
+</html>

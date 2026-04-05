@@ -14,6 +14,7 @@ const PLUGIN_ICONS: Record<string, string> = {
   github: '🐙',
   flashcards: '📚',
   dictionary: '📖',
+  'google-classroom': '🎓',
 }
 
 export function PluginSidePanel() {
